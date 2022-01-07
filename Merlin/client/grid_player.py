@@ -1,5 +1,8 @@
-#from helper_classes import *
+# from helper_classes import *
+import queue
+
 from game.constants import *
+
 
 class GridPlayer:
 
@@ -25,9 +28,9 @@ class GridPlayer:
         temp_dict = set(your_units.get_all_unit_ids()) - set(self.id_dict)
         lst1 = list()
         for i in temp_dict:
-            gameUnit = GameUnit(i, your_units.get_unit(i))
-            self.id_dict[i] = gameUnit
-            lst1.append(gameUnit)
+            game_unit = GameUnit(i, your_units.get_unit(i))
+            self.id_dict[i] = game_unit
+            lst1.append(game_unit)
         lst = list()
         temp = set(self.id_dict) - set(your_units.get_all_unit_ids())
         for i in temp:
@@ -43,19 +46,31 @@ class GridPlayer:
         self.id_dict = {i: GameUnit(i, your_units.get_unit(i)) for i in lst_unit_ids}
 
     def first_phase(self, lst_workers):
-
-
+        """
+        """
 
 
 class GameUnit:
 
     def __init__(self, idd, unit_type):
-        self.decision = None
+        self.decision = queue.Queue()
         self.id = idd
         self.type = unit_type
+        self.available = True
+        self.current = None
 
     def set_decision(self, decision):
-        self.decision = decision
+        self.decision.put(decision)
+
+    def make_decision(self):
+        if self.available:
+            self.current = self.decision.get()
+            if isinstance(self.current, Mine):
+                self.available = False
+        else:
+            self.current = None
+            self.available = True
+
 
 
 class Decision:
@@ -89,3 +104,10 @@ class GoTo(Decision):
         """
         if self.path is not None or self.path[0] != self.destination:
             return self.path[0]
+
+
+class Buy(Decision):
+
+    def __init__(self, piece_type):
+        super().__init__()
+        self.piece_type = piece_type

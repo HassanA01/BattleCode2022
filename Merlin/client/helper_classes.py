@@ -15,6 +15,7 @@ def createAttackMove(unitId, direction, length):
 
     return (Moves.ATTACK, unitId, direction, length)
 
+
 def createUpgradeMove(unitId):
     '''
     This is a helper function used by the player to UPGRADE a unit
@@ -23,6 +24,7 @@ def createUpgradeMove(unitId):
     unitId - The ID of the unit that is being upgraded
     '''
     return (Moves.UPGRADE, unitId)
+
 
 def createDirectionMove(unitId, direction, magnitude):
     '''
@@ -36,6 +38,7 @@ def createDirectionMove(unitId, direction, magnitude):
 
     return (Moves.DIRECTION, unitId, direction, magnitude)
 
+
 def createMineMove(unitId):
     '''
     This is a helper function used by the player to MINE a resource, NOTE: Only workers can mine! Must be on top of the resource to mine
@@ -46,6 +49,7 @@ def createMineMove(unitId):
 
     return (Moves.MINE, unitId)
 
+
 def createBuyMove(unitId, unitType, direction):
     '''
     This is a helper function used by the player to BUY a new unit, NOTE: Only workers can buy units!
@@ -55,7 +59,8 @@ def createBuyMove(unitId, unitType, direction):
     direction - The direction to place the new unit in, must be one of the values from the Direction enum (game.constants line 29)
     '''
 
-    return (Moves.BUY,unitId, unitType, direction)
+    return (Moves.BUY, unitId, unitType, direction)
+
 
 def createCaptureMove(unitId, direction):
     '''
@@ -121,8 +126,8 @@ class Map:
         result = None
         so_far = 999999
         for (c_2, r_2) in locations:
-            dc = c_2-c
-            dr = r_2-r
+            dc = c_2 - c
+            dr = r_2 - r
             dist = abs(dc) + abs(dr)
             if dist < so_far:
                 result = (c_2, r_2)
@@ -139,8 +144,8 @@ class Map:
         queue = [[start]]
         vis = set(start)
         if start == dest or graph[start[1]][start[0]] == 'X' or \
-                not (0 < start[0] < len(graph[0])-1
-                     and 0 < start[1] < len(graph)-1):
+                not (0 < start[0] < len(graph[0]) - 1
+                     and 0 < start[1] < len(graph) - 1):
             return None
 
         while queue:
@@ -151,9 +156,9 @@ class Map:
 
             if node == dest:
                 return path
-            for adj in ((c+1, r), (c-1, r), (c, r+1), (c, r-1)):
+            for adj in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
                 if (graph[adj[1]][adj[0]] == ' ' or
-                        graph[adj[1]][adj[0]] == 'R') and adj not in vis:
+                    graph[adj[1]][adj[0]] == 'R') and adj not in vis:
                     queue.append(path + [adj])
                     vis.add(adj)
 
@@ -204,10 +209,10 @@ def coordinate_from_direction(x: int, y: int, direction: str) -> (int, int):
         'DOWN'
     """
     if direction == 'LEFT':
-        return (x-1, y)
+        return (x - 1, y)
     if direction == 'RIGHT':
-        return (x+1, y)
+        return (x + 1, y)
     if direction == 'UP':
-        return (x, y-1)
+        return (x, y - 1)
     if direction == 'DOWN':
-        return (x, y+1)
+        return (x, y + 1)
