@@ -1,5 +1,10 @@
-from Engine.client.unit import Unit 
+from Engine.client.unit import Unit
 
-#TODO
+from queue import Queue
+
+
+# TODO
 class GameUnit(Unit):
-    pass
+
+    def __init__(self):
+        pass

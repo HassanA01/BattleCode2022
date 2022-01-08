@@ -33,7 +33,7 @@ def createDirectionMove(unitId, direction, magnitude):
     Parameters:
     unitId - The ID of the unit that is moving
     direction - The direction to move in, must be one of the values from the Direction enum (game.constants line 29)
-    length - how far the unit is moving, must be less than the unit's MAX_MOVEMENT_SPEED (game.constants line 96)
+    magnitude - how far the unit is moving, must be less than the unit's MAX_MOVEMENT_SPEED (game.constants line 96)
     '''
 
     return (Moves.DIRECTION, unitId, direction, magnitude)

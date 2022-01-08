@@ -80,6 +80,7 @@ class GameEngine:
             self.renderEngine.draw()
         while game.getWinner() == None: # TODO: Raise notimplementedError
             print("Turn:", turn)
+            print()
             game.tick()
             current_map, current_units, current_misc = game.get_overridden_state()
             if self.does_render:

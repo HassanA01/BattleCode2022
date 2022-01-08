@@ -1,0 +1,9 @@
+Universal Strategy:
+
+	Empty Ore spot => spawn a worker and send him there
+	
+
+Attack Strategy:
+
+
+Defense Strategy:
