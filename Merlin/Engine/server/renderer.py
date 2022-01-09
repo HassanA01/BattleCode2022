@@ -1,6 +1,4 @@
 import pygame
-import time
-import threading
 class RenderingEngine:
 
     white = (255, 255, 255)
@@ -9,17 +7,23 @@ class RenderingEngine:
     def __init__(self, factory, gameMap):
         self.tile_list = []
         self.map = gameMap
-        self.cells_y = len(self.map.map)
-        self.cells_x = len(self.map.map[0])
         self.miscellaneous = {}
+        self.set_drawing_configuration()
         # find size of tiles required to be at max 720x720 
         # 720 = cells_x*tile_size,
         pygame.init()
-        self.tile_size = min(720/self.cells_x, 720/self.cells_y)
         self.factory = factory
         self.screen = pygame.display.set_mode((920, 720))
-        pygame.display.set_caption("Battlecode: Merlin.io") # TODO this should be passed in as well
+        pygame.display.set_caption("Battlecode: Merlin.io")
         pygame.event.set_blocked(pygame.MOUSEMOTION)
+
+    def set_drawing_configuration(self):
+        self.cells_y = len(self.map.map)
+        self.cells_x = len(self.map.map[0])
+        self.tile_size = min(920/self.cells_x, 920/self.cells_y)
+        self.tile_size_x = min(920/self.cells_x, 920/self.cells_y)
+        self.tile_size_y = min(920/self.cells_x, 920/self.cells_y)
+        self.grid_bias = 0
 
     def wait(self):
         while(True):
@@ -31,24 +35,39 @@ class RenderingEngine:
                     raise SystemExit
 
     def update(self, gameMap, units, miscellaneous):
-
         self.units = units
         self.map = gameMap
         self.miscellaneous = miscellaneous
-        print(miscellaneous)
+
+    def cell_to_pos(self, x , y):
+        x = x * self.tile_size_x + self.grid_bias
+        y = y * self.tile_size_y + self.grid_bias
+        return x, y
 
     def draw(self):
-        pygame.event.pump()
+        # TODO render units
+        self.screen.fill(pygame.Color("black"))
+        self.draw_map()
+        self.draw_units()
+        # TODO render miscellaneous
+        self.draw_text(self.screen, str(self.miscellaneous))
+        pygame.display.update()
+        pygame.event.wait()
+
+    def draw_map(self):
         row_count = 0
         for row in self.map:
             col_count = 0
+            if len(row) == 0:
+                raise Exception("Illegal row found")
             for tile in row:
                 img = pygame.transform.scale(
                     self.factory.get_tile_image(tile), (self.tile_size, self.tile_size)
                 )
                 img_rect = img.get_rect()
-                img_rect.x = col_count * self.tile_size
-                img_rect.y = row_count * self.tile_size
+                pos = self.cell_to_pos(col_count, row_count)
+                img_rect.x = pos[0]
+                img_rect.y = pos[1]
                 drawn = (img, img_rect)
                 self.tile_list.append(drawn)
                 col_count += 1
@@ -56,12 +75,6 @@ class RenderingEngine:
 
         for tile in self.tile_list:
             self.screen.blit(tile[0], tile[1])
-        # TODO render units
-        self.draw_units()
-        # TODO render miscellaneous
-        self.draw_text(self.screen, str(self.miscellaneous))
-        pygame.display.update()
-        pygame.event.wait()
 
     def draw_units(self):
         unit_list = []
@@ -76,12 +89,13 @@ class RenderingEngine:
             unit_list.append(drawn)
         for unit in unit_list:
             self.screen.blit(unit[0], unit[1])
+
     def draw_text(self, surface, text, color=pygame.Color('white')):
         font = pygame.font.SysFont(None, 40)
         words = [word.split(' ') for word in text.splitlines()]  # 2D array where each row is a list of words.
         space = font.size(' ')[0]  # The width of a space.
         max_width, max_height = (720,720)
-        pos = (300, 400)
+        pos = (300, 600)
         x, y = pos
         for line in words:
             for word in line:

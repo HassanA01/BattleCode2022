@@ -26,12 +26,13 @@ Where you want to enter the deerhunt project repository \
    `https://github.com/UTM-Robotics/Deerhunt-Battlecode2021.git` \
    Then click on the "Clone" button.
 
-![Landing Page](pycharm_images/project screen.png "Image of pycharm landing screen")
+<img alt="Landing Page" src="pycharm_images/project screen.png" title="Image of pycharm landing screen" width="70%"/>
 
-![Clone Project](pycharm_images/vcs clone.png "Image of pycharm clone project screen")
+<img alt="Clone Project" src="pycharm_images/vcs clone.png" title="Image of pycharm clone project screen" width="70%"/>
 
 3. After the project is cloned, you may be presented with a dialog box asking you to create a virtual environment.
-![Create Virtual Environment](pycharm_images/create venv splash.png "Image of pycharm create virtual environment screen")
+   <img alt="Create Virtual Environment" src="pycharm_images/create venv splash.png" title="Image of pycharm create virtual environment screen" width="70%"/>
+   
    1. If you have this dialog box just click "OK" and proceed to step 5.
    
    2. If you don't have this dialog box, or you clicked "Cancel", then continue to step 4.
@@ -42,14 +43,15 @@ Where you want to enter the deerhunt project repository \
    3. Double-check the base version is set to the python version you want to use.
    4. Click "OK"
 
-![No Interpreter](pycharm_images/no interpreter.png "Image of pycharm no interpreter screen")
-![Add Interpreter](pycharm_images/create venv manual.png "Image of pycharm add interpreter screen")
+<img alt="No Interpreter" src="pycharm_images/no interpreter.png" title="Image of pycharm no interpreter screen" width="70%"/>
+
+<img alt="Add Interpreter" src="pycharm_images/create venv manual.png" title="Image of pycharm add interpreter screen" width="70%"/>
 
 5. Installing dependencies
    1. Click on the terminal tab at the bottom of the screen.
    2. Type `pip install pygame`
 
-![Install Dependencies](pycharm_images/install dep.png "Image showing how to install dependencies")
+<img alt="Install Dependencies" src="pycharm_images/install dep.png" title="Image showing how to install dependencies" width="70%"/>
 
 6. Setting up client2
    1. Copy the client folder by right-clicking on it and choosing "copy"
@@ -68,7 +70,7 @@ Where you want to enter the deerhunt project repository \
    9. In the box add the server, client1, and client2 configurations.
    10. Click "Apply" and "OK"
 
-![Adding Client Run Configuration](pycharm_images/add client run config.png "Image showing how to add client run configuration")
-![Adding Compound Run Configuration](pycharm_images/compound run.png "Image showing how to add compound run configuration")
+<img alt="Adding Client Run Configuration" src="pycharm_images/add client run config.png" title="Image showing how to add client run configuration" width="70%"/>
+<img alt="Adding Compound Run Configuration" src="pycharm_images/compound run.png" title="Image showing how to add compound run configuration" width="70%"/>
 
 8. You should now be able to all 3 files at the same time by selecting the "compound" configuration, and clicking "Run".

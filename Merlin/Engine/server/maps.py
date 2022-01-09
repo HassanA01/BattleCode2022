@@ -1,4 +1,5 @@
 from .tile import TileFactory, IllegalTileException
+from copy import deepcopy
 class Map:
     """
     # 2D array of tile objects
@@ -12,7 +13,17 @@ class Map:
         self.map_file = map_file
         self.tileFactory = tileFactory
         self.map = []
-        self.deserialize()
+        if "\n" in map_file:
+            self.deserialize_from_text()
+        else:
+            self.deserialize()
+
+    def print_map(self):
+        display = deepcopy(self.map)
+        #Prints each row
+        display = [list(map(str, r)) for r in display]
+        for row in display:
+            print(''.join(row))
 
     def deserialize(self):
         """
@@ -20,7 +31,7 @@ class Map:
         :return:
         """
         if not self.map_file:
-            print("error in _deserialize map file is none")
+            raise Exception("Error deserializing map. Map file is none")
         # note: r by default
         with open(self.map_file) as f:
             i = 0
@@ -35,17 +46,32 @@ class Map:
             f.close()
         print(f"Deserialized map: {self.map_file}")
 
+    def deserialize_from_text(self):
+        """
+        deserializes the map object from the human readable .map file to its state in the game.
+        :return:
+        """
+        loaded_text = self.map_file
+        for line in loaded_text.split("\n"):
+            self.map.append([])
+            for char in line:
+                tile = self.tileFactory.createTile(char)
+                if not tile:
+                    raise IllegalTileException(f"Error: unknown symbol: {char} found in {self.map_file}")
+                self.map[-1].append(tile)
+        print(f"Loaded from text state")
+
     def serialize(self):
         """
         serializes the current state of the map object into a .map human-readable text file representation.
         Essentially converting The tiles to letters or symbols in the map file.
         :return string
         """
-        if not self.map:
-            print("Error: there is no map to serialize")
-        # overwrite existing file with write mode, just easier atm. more efficient way likely exists with append/edit.
-        with open(self.map_file, "w") as f:
-            for row in self.map:
-                f.writelines(row)
-            f.close()
-        print(f"Finished Serializing map into {self.map_file}")
+        output = ''
+        display = deepcopy(self.map)
+        #Prints each row
+        display = [list(map(str, r)) for r in display]
+        for row in display[:-1]:
+            output+=''.join(row) + "\n"
+        output += ''.join(display[-1])
+        return output

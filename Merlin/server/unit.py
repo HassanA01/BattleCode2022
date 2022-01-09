@@ -7,35 +7,46 @@ class UnitFactory():
 
     id_count = 0
 
-    def createUnit(self,uid, *restInfo):
+    def createUnit(self,uid, x,y):
         '''
         Deserializes unit, this is the factory used to create new units
         '''
-
         unit = None
         if uid == Units.WORKER:
-            unit = WorkerUnit(*restInfo, self.id_count)
+            unit = WorkerUnit(x,y, self.id_count)
         elif uid == Units.SCOUT:
-            unit = ScoutUnit(*restInfo, self.id_count)
+            unit = ScoutUnit(x,y, self.id_count)
         elif uid == Units.KNIGHT:
-            unit = KnightUnit(*restInfo, self.id_count)
+            unit = KnightUnit(x,y, self.id_count)
         elif uid == Units.ARCHER:
-            unit = ArcherUnit(*restInfo, self.id_count)
+            unit = ArcherUnit(x,y, self.id_count)
         else:
-            return None
+            raise Exception(f"Error duplicating into invalid unit uid: {uid}")
         self.id_count += 1
         return unit
 
+class LoadUnit(Unit):
+    def __init__(self,x,y,unitType:Units, id, health, level, has_flag):
+        self.health = health
+        self.level = level
+        self.has_flag = has_flag
+        super().__init__(x,y,unitType, id)
+        self.id = id
+        self.x = x
+        self.y = y
 
+    def __repr__(self):
+        return str(self.unitType.value)
+
+    def string(self):
+        return str(self.unitType.value)
 class GameUnit(Unit):
-    def __init__(self,x,y,UnitType, id, health, speed):
+    def __init__(self,x,y,unitType:Units, id, health, speed):
         self.health = health
         self.speed = speed
         self.level = 1
         self.has_flag = False
-        super().__init__(x,y,UnitType, id)
-
-        self.unit_type = UnitType
+        super().__init__(x,y,unitType, id)
         self.id = id
         self.x = x
         self.y = y
@@ -44,7 +55,7 @@ class GameUnit(Unit):
         return NotImplemented()
 
     def string(self):
-        return str(self.unit_type.value)
+        return str(self.unitType.value)
 
 
 class WorkerUnit(GameUnit):
@@ -58,14 +69,14 @@ class WorkerUnit(GameUnit):
         self.mining_status = -1
 
     def __repr__(self):
-        return "Worker"
+        return "W"
 
     def is_duplicating(self):
         return self.duplicating
 
     def start_duplication(self, duplicating_to_type, duplication_time):
         self.duplicating = True
-        self.duplicating_to_type = duplicating_to_type
+        self.duplicating_to = duplicating_to_type
         self.duplication_time = duplication_time
 
     def finish_duplicating(self):
@@ -74,15 +85,15 @@ class WorkerUnit(GameUnit):
         self.duplicating = False
     
     def is_mining(self):
-        return self.mining_status > 0
+        return self.mining_status >= 0
 
 class ScoutUnit(GameUnit):
 
     def __init__(self, x, y, id):
-        super().__init__(x, y, Units.SCOUT, id, 60, 1.3)
+        super().__init__(x, y, Units.SCOUT, id, 60, 1)
 
     def __repr__(self):
-        return "Scout"
+        return "T"
 
     def capture(self):
         self.has_flag = True
@@ -90,10 +101,10 @@ class ScoutUnit(GameUnit):
 class KnightUnit(GameUnit):
 
     def __init__(self, x, y, id):
-        super().__init__(x, y, Units.KNIGHT, id, 130, 0.7)
+        super().__init__(x, y, Units.KNIGHT, id, 130, 2)
 
     def __repr__(self):
-        return "Knight"
+        return "K"
 
 
 class ArcherUnit(GameUnit):
@@ -103,7 +114,7 @@ class ArcherUnit(GameUnit):
 
 
     def __repr__(self):
-        return "Archer"
+        return "A"
 
     def attack():
         pass
