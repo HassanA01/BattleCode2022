@@ -25,14 +25,16 @@ class MerlinRenderFactory(BaseRenderFactory):
     def get_unit_image(self, unit):
         # Load images
         img = None
-        if isinstance(unit, WorkerUnit):
+        id = unit.unitType
+        if  id == Units.WORKER:
             img = pygame.image.load("game/assets/miner_1.webp")
-        elif isinstance(unit, ScoutUnit):
+        elif id == Units.SCOUT:
             img = pygame.image.load("game/assets/scout_1.png")
-        elif isinstance(unit, KnightUnit):
+        elif id == Units.KNIGHT:
             img = pygame.image.load("game/assets/knight_1.png")
-        elif isinstance(unit, ArcherUnit):
+        elif id == Units.ARCHER:
             img = pygame.image.load("game/assets/archer_1.png")
         else:
-            raise Exception("Invalid unit type:", unit)
+            print(unit.id)
+            raise Exception("Invalid unit type:", type(unit))
         return img

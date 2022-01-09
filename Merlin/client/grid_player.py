@@ -208,7 +208,7 @@ class Mine(Decision):
         if self.mined is False:
             self.mined = True
             return createMineMove(unit.id)
-    
+
     def __str__(self) -> str:
         return 'Mine'
 
@@ -234,7 +234,7 @@ class GoTo(Decision):
     def reset(self):
         self.current = None
         self.path = None
-    
+
     def __str__(self) -> str:
         return 'GoTo'
 
@@ -258,7 +258,7 @@ class Upgrade(Decision):
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int]:
         return createUpgradeMove(unit.id)
-    
+
     def __str__(self) -> str:
         return 'Upgrade'
 
@@ -275,7 +275,7 @@ class GoToMine(Decision):
         if self.destination is None:
             print('h')
             self.destination = closest_resource(kwargs.get('avail_resources'), unit)
-            
+
             kwargs.get('avail_resources')[self.destination] = unit.id
             print(self.destination)
         if self.path is None and self.destination is not None:
@@ -283,7 +283,7 @@ class GoToMine(Decision):
             self.path = bfs(kwargs.get('locked'), self.current, self.destination)
             self.path.pop(0)
             self.time = len(set(self.path) - set(self.current)) + 2
-        
+
         if (len(self.path) == 0 or self.destination is None) and self.mined is False:
             self.mined = True
             return createMineMove(unit.id)
@@ -295,7 +295,7 @@ class GoToMine(Decision):
     def reset(self):
         self.current = None
         self.path = None
-    
+
     def __str__(self) -> str:
         return 'GoToMine'
 
@@ -333,7 +333,7 @@ def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) ->
         while queue:
             path = queue.pop(0)
             node = path[-1]
-            
+
             r = node[1]
             c = node[0]
             if node == dest:

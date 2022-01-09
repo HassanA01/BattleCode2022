@@ -43,17 +43,17 @@ class GoldTile(Tile):
 
 class SilverTile(Tile):
     def string(self):
-        return f'"{Tiles.GOLD}"'
+        return f'"{Tiles.SILVER}"'
 
     def __repr__(self):
-        return Tiles.GOLD
+        return Tiles.SILVER
 
 class CopperTile(Tile):
     def string(self):
-        return f'"{Tiles.GOLD}"'
+        return f'"{Tiles.COPPER}"'
 
     def __repr__(self):
-        return Tiles.GOLD
+        return Tiles.COPPER
 
 class BaseTile(Tile):
     def string(self):

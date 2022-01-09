@@ -31,8 +31,6 @@ class ClientConnection:
         for row in display:
             print(''.join(row))
 
-        input()
-
     #units_to_dict returns a list of each unit as a dictionary
     def units_to_dict(self, units):
         return [u.__dict__ for u in units.values()]
@@ -41,13 +39,17 @@ class ClientConnection:
     def create_move(self, id, body):
         try:
             return self.moveFactory.createMove(id, body)
-        except:
+        except Exception as e:
             #Happens if not enough data is send in body.
+            if self.verbose:
+                print(e)
+                print(f"Creation failed: Invalid move data: {str(body)}")
             return None
+
 
     #filter_fog_of_war updates what each player can see on the board given each units vision
     def filter_fog_of_war(self, current, opponent):
-        #Coppies the opponents units and filters through them
+        #Copies the opponents units and filters through them
         ret = copy.deepcopy(opponent)
         for o_id, o_unit in list(ret.items()):
             should_include = False
@@ -77,27 +79,29 @@ class ClientConnection:
                 'turns_left'  : turns,
                 **misc
             }
-
             data = json.dumps(d).encode()
             self.sock.sendall('{:10}'.format(len(data)).encode())
             self.sock.sendall(data)
-
             #Retrieve the response and print the current map before the move
             size = int(self.sock.recv(10).decode())
             response = self.sock.recv(size).decode()
 
-            if self.verbose:
-                self.print_map(d, game_state)
-
             j = json.loads(response)
-
             #Parse to commands to unit moves and print them
-            moves = [(str(k), self.create_move(k, v)) for k, v in j]
+            moves = []
+            for command in j:
+                move = self.create_move(command[0], command)
+                if move:
+                    moves.append((command[1], move))
+
+            #moves = [(v[1], self.create_move(v[0], v)) for v in j]
             # k is unit id
             # v is move arguments
             if self.verbose:
-                print(self.name, ':', moves)
-
+                self.print_map(d, game_state)
+                print(self.name, 'moveset:', moves)
             return moves
-        except:
+        except Exception as e:
+            if self.verbose:
+                print(e)
             return []

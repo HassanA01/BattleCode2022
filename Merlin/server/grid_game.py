@@ -1,5 +1,6 @@
 import json
-from game.constants import ATTACK_DAMAGE, DUPLICATION_TIME, MINING_TIME, UPGRADE_COSTS
+from os import X_OK
+from game.constants import ATTACK_DAMAGE, BUY_TIME, MINING_TIME, UPGRADE_COSTS
 from game.constants import Tiles
 from server import *
 from copy import deepcopy
@@ -10,7 +11,7 @@ from Engine.server.maps import Map
 from .unit import *
 from .tile import BaseTile
 from .move import *
-from game.constants import Units, Direction, MAX_ATTACK_RANGE, MINING_REWARDS, TURNS_PER_PLAYER, MAX_MOVEMENT_SPEED
+from game.constants import Units, Direction, MAX_ATTACK_RANGE, MINING_REWARDS, TURNS_PER_PLAYER, MAX_MOVEMENT_SPEED, MAX_LEVEL
 
 def direction_to_coord(x,y, direction, magnitude = 1):
     if direction == Direction.DOWN:
@@ -24,7 +25,7 @@ def direction_to_coord(x,y, direction, magnitude = 1):
     return None, None
 
 def is_within_map(map,x,y):
-    return 0 <= x and x < len(map) and 0 <= y and y < len(map[0])
+    return 0 <= x and x < len(map[0]) and 0 <= y and y < len(map)
 
 def is_conflicting(x,y,all_units):
     return all_units.get('{},{}'.format(x, y),None) != None
@@ -40,14 +41,18 @@ def is_free_path(x,y,targetX,targetY,grid,allUnits):
 
     newX = x 
     newY = y
-    while (dx != 0 and dy != 0):
-        newX = newX + (-1 if dx < 0 else 1)
-        newY = newY + (-1 if dy < 0 else 1)
 
-        if repr(grid[newY][newX]) != Tiles.GROUND or is_conflicting(newX,newY,allUnits):
+    while (dx != 0 or dy != 0):
+        if dx != 0:
+            newX = newX + (-1 if dx < 0 else 1)
+        if dy != 0:
+            newY = newY + (-1 if dy < 0 else 1)
+        if repr(grid[newY][newX]) == Tiles.WALL or is_conflicting(newX,newY,allUnits):
             return False
-        dx = dx + (1 if dx < 0 else -1)
-        dy = dy + (1 if dy < 0 else -1)
+        if dx != 0:
+            dx = dx + (1 if dx < 0 else -1)
+        if dy != 0:
+            dy = dy + (1 if dy < 0 else -1)
     return True
 
 
@@ -62,9 +67,9 @@ def can_reach(x,y,targetX,targetY,unitType):
 class MerlinGridGame(GridGame):
     """
     GridGame is the currently running game, it controls all game state and updates the state each turn with tick.
-    
-    This game is won by a player capturing the other player's flag
-    
+    This game is won by a player capturing the other player's flag, having the most resources at the end of the game, or
+    by killing all the enemy player's units.
+
     """
     def __init__(self, player_one_connection:ClientConnection, player_two_connection:ClientConnection, gamemap:Map):
         super().__init__(player_one_connection, player_two_connection, gamemap)
@@ -104,12 +109,12 @@ class MerlinGridGame(GridGame):
             return self.p1_flag
 
     def verify_move(self, k:int, v:Move, player_state, player_resources, name, enemy_units, moved_units):
-        
-        if k not in player_state:
+        if str(k) not in player_state:
             print('ERROR: Cannot move enemy unit: {}'.format(k))
             return False
-        unit = player_state[k]
-
+        unit = player_state[str(k)]
+        if  isinstance(unit, WorkerUnit) and (unit.is_duplicating() or unit.is_mining()):
+            return False
         if unit.id in moved_units:
             return False
         #Checks if unit is currently doing something preventing them from moving
@@ -124,16 +129,15 @@ class MerlinGridGame(GridGame):
                 if unit.is_mining():
                     print('ERROR: {} cannot act while mining'.format(k))
                     return False
-                
-                if repr(self.grid[unit.y][unit.x]) in Tiles._value2member_map_:
+
+                if repr(self.grid[unit.y][unit.x]) in [Tiles.GOLD, Tiles.COPPER, Tiles.SILVER]:
                     moved_units.add(unit.id)
                     return True
                 else:
                     return False
             elif isinstance(v, BuyMove):
-                if unit.type != Units.WORKER:
+                if unit.unitType != Units.WORKER:
                     return False
-                
                 if v.unitType not in Units._value2member_map_:
                     return False
 
@@ -143,14 +147,13 @@ class MerlinGridGame(GridGame):
                 newX, newY = direction_to_coord(unit.x,unit.y,v.direction)
                 if newX == None and newY == None:
                     return False
-
-                if is_within_map(self.grid, newX, newY):
+                if is_within_map(self.grid, newX, newY) and repr(self.grid[newY][newX]) != Tiles.WALL:
                     moved_units.add(unit.id)
                     return True
                 else:
                     return False
             elif isinstance(v, CaptureMove):
-                if unit.type != Units.SCOUT:
+                if unit.unitType != Units.SCOUT:
                     return False
                 newX, newY = direction_to_coord(unit.x,unit.y,v.direction)
                 if newX == None and newY == None:
@@ -162,7 +165,7 @@ class MerlinGridGame(GridGame):
                 else:
                     return False
             elif isinstance(v, DirectionMove):
-                if (v.magnitude > MAX_MOVEMENT_SPEED[unit.type]):
+                if (v.magnitude > MAX_MOVEMENT_SPEED[unit.unitType]) or v.magnitude <= 0:
                     return False
                 newX, newY = direction_to_coord(unit.x,unit.y,v.direction, v.magnitude)
                 if not is_within_map(self.grid,newX,newY) or not is_straight_line(unit.x, unit.y, newX, newY):
@@ -172,11 +175,16 @@ class MerlinGridGame(GridGame):
                     return True
                 else:
                     return False
+
             elif isinstance(v, AttackMove):
+                x,y = unit.pos_tuple()
+                v.target = direction_to_coord(x,y ,v.direction, v.length)
                 targetX, targetY = v.target
-                if not is_within_map(targetX, targetY):
+                if not is_within_map(self.grid, targetX, targetY):
                     return False
-                if can_reach(unit.x,unit.y, targetX, targetY, unit.type):
+                if not self.has_unit(targetX, targetY):
+                    return False
+                if can_reach(unit.x,unit.y, targetX, targetY, unit.unitType):
                     moved_units.add(unit.id)
                     return True
                 else:
@@ -191,8 +199,8 @@ class MerlinGridGame(GridGame):
                 else:
                     return False
         return False
+
     def get_overridden_state(self):
-        # TODO this probably should be changed to misc
         misc = {**self.resources, "Player 1 Flag": self.p1_flag, "Player 2 Flag":self.p2_flag}
         return self.grid, self.all_units, misc
 
@@ -201,11 +209,11 @@ class MerlinGridGame(GridGame):
         y = 0
         if direction == Direction.UP:
             y = 1
-        elif direction == Direction.Down:
+        elif direction == Direction.DOWN:
             y = -1
-        elif direction == Direction.Left:
+        elif direction == Direction.LEFT:
             x = -1
-        elif direction == Direction.Right:
+        elif direction == Direction.RIGHT:
             x = 1
         return x,y
 
@@ -218,38 +226,42 @@ class MerlinGridGame(GridGame):
         return x, y
 
     def make_move(self, k, v, player_state, player_name, opponent_state):
+        k = str(k)
         unit = player_state[k]
         if isinstance(v, DirectionMove):
             direction = v.direction
             magnitude = v.magnitude
             x,y = unit.x, unit.y
-            dx,dy = direction_to_coord(direction)
+            old_x ,old_y = x, y
+            dx,dy = direction_to_coord(0,0,direction)
             x += dx*magnitude
             y += dy*magnitude
-            self.move_unit(x, y, player_state[k])
-            if unit.has_flag():
+            unit.x = x
+            unit.y = y
+            self.move_unit(old_x, old_y, unit)
+            if unit.has_flag:
                 self.setFlag(self.getEnemyFlag(player_name), x, y)
         elif isinstance(v, AttackMove):
-            attacked_unit = self.get_unit(v.targetX, v.targetY)
-            damage = ATTACK_DAMAGE[unit.unit_type][unit.level]
+            attacked_unit = self.get_unit(v.target[0], v.target[1])
+            damage = ATTACK_DAMAGE[unit.unitType][unit.level]
             attacked_unit.health -= damage
             if attacked_unit.health <= 0:
                 self.del_unit(attacked_unit.x, attacked_unit.y)
-                del opponent_state[attacked_unit.id]
+                del opponent_state[str(attacked_unit.id)]
         elif isinstance(v, UpgradeMove):
-            self.resources[player_name] -= UPGRADE_COSTS[unit.unit_type][unit.level]
+            self.resources[player_name] -= UPGRADE_COSTS[unit.unitType][unit.level]
             unit.level += 1
         elif isinstance(v, BuyMove):
             self.resources[player_name] -= UPGRADE_COSTS[v.unitType][0]
-            unit.start_duplication(v.unitType,DUPLICATION_TIME)
+            unit.action_direction = v.direction
+            unit.start_duplication(v.unitType,BUY_TIME)
         elif isinstance(v, MineMove):
-            x,y = unit.x, unit.y
-            miningType = self.grid[unit.y][unit.x].id
-            v.mining_status = MINING_TIME
+            unit.mining_status = MINING_TIME
+            unit.action_direction = None
         elif isinstance(v, CaptureMove):
             direction = v.direction
             x,y = unit.x, unit.y
-            flag = self.get_enemy_flag(player_name)
+            flag = self.getEnemyFlag(player_name)
             self.setFlag(flag, x, y)
             unit.has_flag = True
 
@@ -303,7 +315,7 @@ class MerlinGridGame(GridGame):
         return None
 
 
-    def tick_player(self, conn, current, opponent, name, turns):
+    def tick_player(self, conn:ClientConnection, current, opponent, name:str, turns):
         #Gets a list of moves from the player
         misc = {"your_flag": {},
                 "enemy_flag": {}
@@ -319,7 +331,7 @@ class MerlinGridGame(GridGame):
             }
         moves = conn.tick(self, current, opponent, self.resources, turns, misc)
 
-        moved_units = {} # id to n number of moves
+        moved_units = set() # id to n number of moves
         #Goes through each given move and verifies it is valid. If it is execute it.
         for m in moves:
             unit_id, move_object = m
@@ -328,9 +340,8 @@ class MerlinGridGame(GridGame):
                 self.make_move(unit_id, move_object, current, name, opponent)
 
     # Creates the workers desired duplicate at a given tile.
-    def create_duplicate(self,unit:WorkerUnit):
-        location = self.get_relative_location(*unit.pos_tuple(), unit.action_direction)
-        return self.unitFactory.createUnit(unit.duplicating_to_type, *location) # TODO finish directional spawning.
+    def create_duplicate(self,unit:WorkerUnit, location):
+        return self.unitFactory.createUnit(unit.duplicating_to, location[0], location[1])
 
 
     #tick is run each turn and updates the game state
@@ -345,19 +356,23 @@ class MerlinGridGame(GridGame):
 
         # manage each units actions that change game state overall.
         #Checks if any units are duplicating, if they are increment the status and create a new unit if they are complete
-        for unit in self.all_units.values():
+        for unit in list(self.all_units.values()):
             player = self.get_unit_player(unit)
             if isinstance(unit, WorkerUnit) and unit.is_duplicating():
-                unit.duplication_status -= 1
-                location = self.get_relative_location(*unit.pos_tuple(), unit.action_direction)
-                if unit.duplication_status <= 0 and not self.has_unit(*location):
-                    self.add_unit(player, self.create_duplicate(unit))
+                unit.duplication_time -= 1
+                location = direction_to_coord(unit.x,unit.y,unit.action_direction)
+                if unit.duplication_time <= 0 and not self.has_unit(location[0], location[1]):
+                    self.add_unit(player, self.create_duplicate(unit, location))
                     unit.finish_duplicating()
 
         #Checks if any units are mining, if they are increment the status and add resources if they complete
         for unit in self.all_units.values():
             player_name = self.get_unit_player_name(unit)
+            print(player_name, ":", unit.id, unit.unitType)
+            #if unit.unitType == Units.WORKER:
+                #print(unit.__dict__)
             if isinstance(unit, WorkerUnit) and unit.is_mining():
+                #print("Unit mining:", unit)
                 unit.mining_status -= 1
                 if unit.mining_status == 0:
                     unit.mining_status = -1
@@ -368,3 +383,18 @@ class MerlinGridGame(GridGame):
 class MerlinGridGameFactory(GridGameFactory):
     def getGame(self, connections, map)->MerlinGridGame:
         return MerlinGridGame(*connections, map)
+
+    def serialize_unit(self, unit:GameUnit):
+        d = {
+            "x": unit.x,
+            "y": unit.y,
+            "health": unit.health,
+            "level": unit.level,
+            "has_flag": unit.has_flag,
+            "id": unit.level,
+            "unitType": unit.unitType.value
+        }
+        return d
+    def deserialize_unit(self, unit:dict):
+        unit["unitType"] = Units(unit["unitType"])
+        return LoadUnit(**unit)

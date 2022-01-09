@@ -35,11 +35,10 @@ class GridGame():
         unit.id = self.next_id
         player[str(self.next_id)] = unit
         self.next_id += 1
-    
         self.all_units['{},{}'.format(unit.x, unit.y)] = unit
 
     def get_tile(self, unit:Unit):
-        x,y = unit.position()
+        x,y = unit.pos_tuple()
         return self.grid[y][x]
 
     def move_unit(self, x, y, unit):
@@ -58,13 +57,13 @@ class GridGame():
 
     # returns the player to which the unit is owned by.
     def get_unit_player(self, unit):
-        if unit.id in self.p1_units:
+        if str(unit.id) in self.p1_units.keys():
             return self.p1_units
         else:
             return self.p2_units
 
     def get_unit_player_name(self, unit):
-        if unit.id in self.p1_units:
+        if str(unit.id) in self.p1_units:
             return self.p1_conn.name
         else:
             return self.p2_conn.name
@@ -109,4 +108,8 @@ class GridGame():
 
 class GridGameFactory():
     def getGame(self, connections:List[ClientConnection], map:Map)->GridGame:
+        raise NotImplementedError
+    def serialize_unit(self, unit:Unit):
+        raise NotImplementedError
+    def deserialize_unit(self, unit:dict):
         raise NotImplementedError

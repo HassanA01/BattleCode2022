@@ -3,6 +3,9 @@ import argparse
 import socket
 import os
 import random
+import json
+from copy import deepcopy
+
 from sys import platform
 from Engine.server.renderer import RenderingEngine
 from Engine.server import renderer
@@ -61,16 +64,24 @@ class GameEngine:
         print(f'Connected to client {player} at addr')
         self.totalPlayers += 1
 
-    def __loadMap(self):
+    def __loadMap(self, file_name=None):
         #Picks a random map from the maps folder and creates the game
-        # TODO: CHANGE MAP LOADING SYSTEM
-        file_name = 'maps/{}'.format(random.choice(os.listdir('maps')))
+        if not file_name:
+            file_name = 'maps/{}'.format(random.choice(os.listdir('maps')))
         print("Loading Map:", file_name)
         self.map = Map(file_name, self.tileFactory)
 
+    def __save_state(self, game):
+        game.get_overridden_state()
+        current_map, current_units, current_misc = game.get_overridden_state()
+        turn_units = {}
+        for key, unit in current_units.items():
+            turn_units[key] = self.gameFactory.serialize_unit(unit)
+        turn_state = {"all_units": turn_units, "misc": current_misc}
+        self.log["state"].append(turn_state)
+        
     def __runGameLoop(self, gamemap):
         game = self.gameFactory.getGame(self.connections, gamemap)
-        # TODO: Change end game logic
         #Ticks the game unit there is a winner or the max_turns is reached
         turn = 0
         print('Game starting...')
@@ -78,7 +89,9 @@ class GameEngine:
             current_map, current_units, current_misc = game.get_overridden_state()
             self.renderEngine.update(current_map, current_units, current_misc)
             self.renderEngine.draw()
-        while game.getWinner() == None: # TODO: Raise notimplementedError
+        if self.replaysavepath:
+            self.__save_state(game)
+        while game.getWinner() == None:
             print("Turn:", turn)
             print()
             game.tick()
@@ -86,43 +99,71 @@ class GameEngine:
             if self.does_render:
                 self.renderEngine.update(current_map, current_units, current_misc)
                 self.renderEngine.draw()
-
-            if self.does_render:
                 print("Press enter on the rendered window to continue. Press q to exit")
                 self.renderEngine.wait() # consumes for the world to see.
             elif self.verbose:
-                print(game.get_state())
                 print("Press enter to continue. Press ctrl+c to exit.")
                 input()
+            if self.replaysavepath:
+                self.__save_state(game)
             turn += 1
         winner = game.getWinner()
         print('Winner:', winner)
         return game.getWinner()
 
-    def start(self, doRender=False, savePath=""):
+    def start(self):
         #Retrieves the port and verbose flag from arguments
         parser = argparse.ArgumentParser()
         parser.add_argument('port', type=int, help='The port to listen on')
-        parser.add_argument('--replaysavepath', type=str, help='If selected, outputs the game state to a file.', nargs='?', const=None)
-        parser.add_argument('--outputpath', type=str, help='The port to listen on', nargs='?', const=None)
-
+        parser.add_argument('--replayloadpath', type=str, help='If selected, outputs the game state to a file.', nargs='?', const=None)
+        parser.add_argument('--replaysavepath', type=str, help='The port to listen on', nargs='?', const=None)
         parser.add_argument('--verbose', help='Should display the game turn by turn', action='store_true')
         parser.add_argument('--render', help='Should render the game\'s images turn by turn', action='store_true')
 
         args = parser.parse_args()
         self.verbose = args.verbose
         self.does_render = args.render
-        self.save_path = args.replaysavepath
-        # TODO: implement save_path feature - Should serialize all contents directly to a file at save_path.
-        # TODO: implement a logpa
-        self.__loadMap()
+        self.load_path = args.replayloadpath
+        self.replaysavepath = args.replaysavepath
         
-        self.__launchServer(args.port)
-        for player in range(self.NUMPLAYERS):
-            self.__connectNextPlayer()
-        if self.does_render:
+        if not self.load_path:
+            self.__loadMap()
+            if self.replaysavepath:
+                self.log = {"map": self.map.serialize(), "state":[]}
+            self.__launchServer(args.port)
+            for player in range(self.NUMPLAYERS):
+                self.__connectNextPlayer()
+            if self.does_render:
+                self.renderEngine = RenderingEngine(self.renderFactory, self.map)
+            self.map.print_map()
+            self.__runGameLoop(self.map)
+            if self.replaysavepath:
+                with open(self.replaysavepath, 'w') as outfile:
+                    json.dump(self.log, outfile)
+                print("Saved to file:", self.replaysavepath)
+            for connection in self.connections:
+                connection.sock.close()
+            self.sock.close()
+        else:
+            # Load file as json
+            # render
+            loaded = None
+            with open(self.load_path) as f:
+                loaded = json.load(f)
+            states = loaded['state'] # get states
+            maptext = loaded['map']
+            self.__loadMap(maptext)
+            top = self.map.map
+            bottom = deepcopy(top[:-1])
+            bottom.reverse()
+            gamemap = top+bottom
             self.renderEngine = RenderingEngine(self.renderFactory, self.map)
-        self.__runGameLoop(self.map)
-        for connection in self.connections:
-            connection.sock.close()
-        self.sock.close()
+            for state in states:
+                current_units = state["all_units"]
+                for key, unit in current_units.items():
+                    current_units[key] = self.gameFactory.deserialize_unit(unit)
+                current_misc = state["misc"]
+                self.renderEngine.update(gamemap, current_units, current_misc)
+                self.renderEngine.draw()
+                print("Press enter on the rendered window to continue. Press q to exit")
+                self.renderEngine.wait() # consumes for the world to see.

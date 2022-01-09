@@ -9,5 +9,3 @@ tmux send-keys "sleep 3 && python3 runClient.py $(hostname) $1" C-m
 tmux split -h
 tmux send-keys "sleep 1 && python3 runClient.py $(hostname) $1" C-m
 tmux next-window
-
-tmux a
