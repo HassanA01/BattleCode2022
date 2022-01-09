@@ -61,16 +61,27 @@ class GridPlayer:
         return lst
 
     def initialize_locked(self, game_map: Map) -> None:
+        """
+        Copies the game map to a list.
+        Elements of list are 1 if position is blocked and 0 otherwise.
+        """
         for i in game_map.grid:
             self.locked.append([1 if j == 'X' else 0 for j in i])
 
     def update_locked(self, enemy_units: List[Unit]) -> List[List[int]]:
+        """
+        Updates the map with the enemy positions and sets positions as 1 (blocked) and returns the updated list.
+        """
         locked = copy.deepcopy(self.locked)
         for i in enemy_units.units:
             locked[i.x][i.y] = 1
         return locked
 
     def initialize_decision(self, your_units: List[Unit]) -> None:
+        """
+        Update self.id_dict by adding new Units and removing deleted (killed) Units.
+        Take deleted Units tasks and update self.dead_tasks (adding their tasks).
+        """
         add, delete = self.adding_tags(your_units)
         for i in delete:
             temp = self.id_dict.pop(i)
@@ -82,14 +93,6 @@ class GridPlayer:
             temp = self.id_dict[i]
             if self.dead_tasks[temp.type]:
                 temp.decision = self.dead_tasks[temp.type].pop()
-
-    def closest_resources(self, unit: Unit) -> Tuple[int, int]:
-        """
-        Returns the coordinates of the closest resource to <unit>.
-        """
-        c, r = unit.position()
-        return min(abs(c_2 - c) + abs(r_2 - r) for (c_2, r_2) in
-                   self.avail_resources.keys()) if self.avail_resources else -1, -1
 
     def adding_tags(self, your_units: List[Unit]) -> Tuple[List[Unit], List[Unit]]:
         """
@@ -113,6 +116,7 @@ class GridPlayer:
 
     def initialize_tags(self, your_units: List[Unit]) -> None:
         """
+        Initialize self.id dict with their corresponding Unit
         """
         lst_unit_ids = your_units.get_all_unit_ids()
 
@@ -130,9 +134,15 @@ class Decision:
         self.time = 1
 
     def next_move(self, unit: Unit, **Kwargs) -> Tuple[Move, int]:
+        """
+        Returns some move based on the game decision.
+        """
         raise NotImplementedError
 
     def reset(self) -> None:
+        """
+        Resets the decisions so the decision is reusable.
+        """
         return
 
     def __str__(self) -> str:
@@ -148,6 +158,9 @@ class GameUnit:
         self.current = None
 
     def add_decision(self, decision: Decision) -> None:
+        """
+        Adds a decision to the self.decision queue.
+        """
         self.decision.put(decision)
 
     def make_decision(self, unit: Unit, **kwargs) -> None:
@@ -168,12 +181,21 @@ class GameUnit:
         return next_move
 
     def direction(self) -> Direction:  # need to implement properly
+        """
+        Returns an empty location direction adjacent to Unit's position.
+        """
         return Direction.DOWN
 
     def get_id(self) -> int:
+        """
+        Getter for self.id
+        """
         return self.id
 
     def reset(self) -> None:
+        """
+        Resets the class
+        """
         self.id = -1
         if self.time > 0:
             self.decision.put(self.current)
@@ -212,6 +234,7 @@ class Mine(Decision):
     def __str__(self) -> str:
         return 'Mine'
 
+
 class GoTo(Decision):
 
     def __init__(self, destination: Tuple[int, int]):
@@ -221,22 +244,20 @@ class GoTo(Decision):
         self.path = None
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
-        """
-        Tells us what the next move of this unit is.
-        """
         if self.path is None:
             self.current = (unit.x, unit.y)
             self.path = kwargs.get('bfs')(self.current, self.destination)
             self.time = len(set(self.path) - set(self.current))
             self.path.pop(0)
-        #if self.path[0] != self.destination:
         return createDirectionMove(unit.id, direction_to(unit,self.path.pop(0)), MAX_MOVEMENT_SPEED[Units.WORKER])
+
     def reset(self):
         self.current = None
         self.path = None
 
     def __str__(self) -> str:
         return 'GoTo'
+
 
 class Buy(Decision):
 
@@ -250,6 +271,7 @@ class Buy(Decision):
 
     def __str__(self) -> str:
         return 'Buy'
+
 
 class Upgrade(Decision):
 
@@ -299,7 +321,11 @@ class GoToMine(Decision):
     def __str__(self) -> str:
         return 'GoToMine'
 
+
 def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, int]]:
+    """
+    Takes the <avail_resources> and the <unit> and returns the closest resource available for <unit>
+    """
     locations = [i for i in avail_resources if avail_resources[i] == -1]
     if not locations:
         return None
@@ -315,13 +341,16 @@ def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, i
             so_far = dist
     return result
 
-def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) -> List[Tuple[int, int]]:
-        """(Map, (int, int), (int, int)) -> [(int, int)]
 
+def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
+        """
+        (Map, (int, int), (int, int)) -> [(int, int)]
         ### tuples are col, row , col,row
         Finds the shortest path from <start> to <dest>.
         Returns a path with a list of coordinates starting with
         <start> to <dest>.
+
+        <grid> is the locked position.
         """
         graph = grid
         queue = [[start]]
@@ -343,14 +372,10 @@ def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) ->
                     queue.append(path + [adj])
                     vis.add(adj)
 
-def is_within_map(map,x,y):
-    return 0 <= x and x < len(map[0]) and 0 <= y and y < len(map)
 
-def closest_pairs(start, targets):
+def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
     """
+    Returns if the coordinate (<x>, <y>) is in <map>.
     """
-    lst = []
-    targets = [(i[0], i[1], -1) for i in targets.keys()]
-    for i, j in enumerate(start):
-        lst.append((targets[i][0], targets[i][1], j[2]))
-    return lst
+
+    return 0 <= x < len(map[0]) and 0 <= y < len(map)
