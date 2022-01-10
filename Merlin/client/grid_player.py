@@ -159,12 +159,8 @@ class GameUnit:
         """
         print(self.decision.empty(Units.WORKER))
         print(self.current)
-        if self.time <= 0 and not self.decision.empty(Units.WORKER):
-
-            if unit.type == Units.WORKER:
-                self.current = self.decision.get(unit.id)
-            else:
-                self.current = self.decision.get()
+        if self.time <= 0 and not self.decision.empty(unit.type):
+            self.current = self.decision.get(unit.type)
             next_move = self.current.next_move(unit, **kwargs)
             self.time = self.current.time
         elif self.time > 0 and self.current:
@@ -328,10 +324,10 @@ class Q:
         """
         Returns a Mine decision if id is given otherwise pops the latest decision in <self.queue> and returns it.
         """
-        if self.queue.empty() and unit_type == Units.WORKER:
-            return Mine()
-        else:
-            return self.queue.get()
+        if self.queue.empty():
+            if unit_type == Units.WORKER:
+                return Mine()
+        return self.queue.get()
 
     def put(self, item: Decision) -> None:
         """
@@ -339,7 +335,7 @@ class Q:
         """
         self.queue.put(item)
 
-    def empty(self, type=None) -> bool:
+    def empty(self, type = None) -> bool:
         """
         Returns False if <type> given is Worker otherwise returns if <self.queue> is empty.
         """
