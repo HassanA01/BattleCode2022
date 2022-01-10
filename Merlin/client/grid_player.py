@@ -42,20 +42,10 @@ class GridPlayer:
         print("turn taken: ", self.count)
         for i in self.avail_resources:
             self.queue.put(GoToMine())
-        # start = []
-        # for i in your_units.get_all_unit_of_type(Units.WORKER):
-        #     if self.id_dict[str(i.id)].time <= 0:               # i.id is integer but function returns as str
-        #         start.append((i.x, i.y, str(i.id)))
-        # # start = [self.id_dict[i.id] for i in your_units.get_all_unit_of_type(Units.WORKER) if self.id_dict[i.id].time <= 0]
-        # closest = closest_pairs(start, self.avail_resources)
-        #for i in your_units.get_all_unit_of_type(Units.WORKER):
         print(self.id_dict,type(your_units),add)
         for i in add:
             self.id_dict[i].add_decision(self.queue.get())
         lst = [i.make_decision(your_units.get_unit(i.id), game_map = game_map, avail_resources = self.avail_resources, locked = locked) for i in self.id_dict.values()]
-        # for i in closest:
-        #     self.id_dict[i[2]].add_decision(GoToMine((i[0], i[1])))
-        #     lst.append(self.id_dict[i[2]].make_decision(your_units.get_unit(i[2]), bfs= game_map.bfs))
         self.count += 1
         print(lst)
         return lst
@@ -153,7 +143,7 @@ class GameUnit:
 
     def __init__(self, idd: int):
         self.id = idd
-        self.decision = queue.Queue()
+        self.decision = Q()
         self.time = 0
         self.current = None
 
@@ -167,9 +157,14 @@ class GameUnit:
         """
         Dequeues a decision and returns the corresponding move
         """
-        print('h')
-        if self.time <= 0 and not self.decision.empty():
-            self.current = self.decision.get()
+        print(self.decision.empty(Units.WORKER))
+        print(self.current)
+        if self.time <= 0 and not self.decision.empty(Units.WORKER):
+
+            if unit.type == Units.WORKER:
+                self.current = self.decision.get(unit.id)
+            else:
+                self.current = self.decision.get()
             next_move = self.current.next_move(unit, **kwargs)
             self.time = self.current.time
         elif self.time > 0 and self.current:
@@ -207,6 +202,7 @@ class GameUnit:
     def available(self) -> bool:
         return self.time <= 0
 
+
 class Attack(Decision):
 
     def __init__(self, where: Tuple[int, int]):
@@ -219,9 +215,10 @@ class Attack(Decision):
     def __str__(self) -> str:
         return 'Attack'
 
+
 class Mine(Decision):
 
-    def init(self):
+    def __init__(self):
         super().__init__()
         self.time = 2
         self.mined = False
@@ -284,6 +281,7 @@ class Upgrade(Decision):
     def __str__(self) -> str:
         return 'Upgrade'
 
+
 class GoToMine(Decision):
 
     def __init__(self, destination: Tuple[int, int] = None):
@@ -295,7 +293,6 @@ class GoToMine(Decision):
 
     def next_move(self, unit: Unit, **kwargs) -> Union[Tuple[Moves, int, Direction, int], Tuple[Moves, int]]:
         if self.destination is None:
-            print('h')
             self.destination = closest_resource(kwargs.get('avail_resources'), unit)
 
             kwargs.get('avail_resources')[self.destination] = unit.id
@@ -320,6 +317,35 @@ class GoToMine(Decision):
 
     def __str__(self) -> str:
         return 'GoToMine'
+
+
+class Q:
+
+    def __init__(self):
+        self.queue = queue.Queue()
+
+    def get(self, unit_type: Type) -> Decision:
+        """
+        Returns a Mine decision if id is given otherwise pops the latest decision in <self.queue> and returns it.
+        """
+        if self.queue.empty() and unit_type == Units.WORKER:
+            return Mine()
+        else:
+            return self.queue.get()
+
+    def put(self, item: Decision) -> None:
+        """
+        Adds a decision to the <self.queue>.
+        """
+        self.queue.put(item)
+
+    def empty(self, type=None) -> bool:
+        """
+        Returns False if <type> given is Worker otherwise returns if <self.queue> is empty.
+        """
+        if type == Units.WORKER:
+            return False
+        return self.queue.empty()
 
 
 def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, int]]:
