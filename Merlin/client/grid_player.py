@@ -171,7 +171,7 @@ class GameUnit:
         self.time -= 1
         return next_move
 
-    def direction(self) -> Direction:  # need to implement properly
+    def direction(self, locked: List[List[int]]) -> Direction:  #TODO #2 need to implement properly
         """
         Returns an empty location direction adjacent to Unit's position.
         """
@@ -205,7 +205,8 @@ class Attack(Decision):
         super().__init__()
         self.where = where
 
-    def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
+    def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]: 
+        #TODO #1
         return
 
     def __str__(self) -> str:
@@ -259,8 +260,17 @@ class Buy(Decision):
         self.piece_type = piece_type
         self.direction = direction
 
-    def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Type, Direction]:
-        return createBuyMove(unit.id, unit.type, unit.direction())
+    def next_move(self, unit: Unit, **kwargs) -> Optional[Tuple[Moves, int, Type, Direction]]:
+        locked = kwargs.get('locked')
+        c = unit.x
+        r = unit.y
+        dir = None
+        for i in ((c+1, r), (c-1, r), (c, r+1), (c, r-1)):
+            if is_within_map(locked, i[0], i[1]) and locked[i[1]][i[0]] != 1:
+                dir = direction_to(unit, i[0], i[1])
+                break
+        if dir is not None:
+            return createBuyMove(unit.id, self.piece_type, dir)
 
     def __str__(self) -> str:
         return 'Buy'
