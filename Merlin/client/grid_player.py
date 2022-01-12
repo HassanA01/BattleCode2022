@@ -3,12 +3,15 @@ from Engine.client.unit import Unit
 from game.constants import *
 import queue
 import copy
-
+from collections import deque
+import random
 from typing import List, Tuple, Type, Union, Optional
 
 from game.constants import *
 
 from Engine.server.move import *
+
+from itertools import combinations
 
 
 class GridPlayer:
@@ -20,14 +23,16 @@ class GridPlayer:
         self.avail_resources = dict()
         self.enemy_resources = dict()
         self.dead_tasks = {1: [], 2: [], 3: [], 4: []}  # Tasks of the dead Units
-        self.queue = queue.Queue()
+        self.queue = deque()
         self.locked = []
+        self.initialized = False
 
     def tick(self, game_map, your_units: Units, enemy_units: List[Unit], resources, turns_left: int, your_flag,
              enemy_flag):
         # Task, the player codes this
         delete, add = [], []
-        if self.count <= 1:  # initalize all the stuff needed
+        if self.initialized is False:  # initalize all the stuff needed
+            self.initialized = True
             half_grid = len(game_map.grid) // 2
             for i in game_map.find_all_resources():  # which resources are on our side
                 if (i[1] > half_grid) ^ (your_flag['y'] > half_grid):
@@ -36,18 +41,36 @@ class GridPlayer:
                     self.avail_resources[i] = -1
             self.initialize_tags(your_units)  # take cares of new and delered units
             self.initialize_locked(game_map)  # which positions are always locked
-            add = self.id_dict.keys()
+            add = self.id_dict.values()
+            # for i in self.avail_resources:
+            #    self.queue.appendleft(GoToMine())
+            ## right now I have hardcoded this, we need to automate it
+            self.queue.append(Buy(Units.WORKER))
+            self.queue.append(Buy(Units.WORKER))
+            self.queue.append(Buy(Units.WORKER))
+            self.queue.appendleft(GoToMine())
+            self.queue.appendleft(GoToMine())
+            self.queue.appendleft(GoToMine())
+            self.queue.appendleft(GoToMine())
+            self.queue.appendleft(GoToMine())
+            self.queue.append(Buy(Units.WORKER))
+        print("turn taken: ", self.count)
+        print('universal q', self.queue)
+        if self.initialized:
+            add, delete = self.adding_tags(your_units)
         locked = self.update_locked(enemy_units)
         self.initialize_decision(your_units)
-        print("turn taken: ", self.count)
-        for i in self.avail_resources:
-            self.queue.put(GoToMine())
-        print(self.id_dict,type(your_units),add)
         for i in add:
-            self.id_dict[i].add_decision(self.queue.get())
-        lst = [i.make_decision(your_units.get_unit(i.id), game_map = game_map, avail_resources = self.avail_resources, locked = locked) for i in self.id_dict.values()]
+            eoeo = self.queue.pop()
+            print('popped from universal q: ', eoeo, 'for ', i.get_id())
+            i.add_decision(eoeo)
+        for j in self.id_dict.values():
+            if j.available(your_units.get_unit(j.get_id())) and self.queue:
+                j.add_decision(self.queue.pop())
+        lst = [i.make_decision(your_units.get_unit(i.id), game_map=game_map, avail_resources=self.avail_resources,
+                               locked=locked) for i in self.id_dict.values()]
         self.count += 1
-        print(lst)
+        lst = list(filter((None).__ne__, lst))
         return lst
 
     def initialize_locked(self, game_map: Map) -> None:
@@ -91,7 +114,7 @@ class GridPlayer:
         If ID is not seen on map then clear ID from hashmap ( worker has been destroyed ).
         Returns all the GameUnits that have been deleted and all GameUnits that have been created
         """
-        temp_dict = set(your_units.get_all_unit_ids()) - set(self.id_dict)
+        temp_dict = set(your_units.get_all_unit_ids()) - set(self.id_dict.keys())
         lst1 = list()  # New units (on the board)
         for i in temp_dict:
             game_unit = GameUnit(i)
@@ -138,13 +161,15 @@ class Decision:
     def __str__(self) -> str:
         raise NotImplementedError
 
+    def are_u_done(self, unit: Unit, **kwargs) -> bool:
+        return
+
 
 class GameUnit:
 
     def __init__(self, idd: int):
         self.id = idd
         self.decision = Q()
-        self.time = 0
         self.current = None
 
     def add_decision(self, decision: Decision) -> None:
@@ -152,26 +177,19 @@ class GameUnit:
         Adds a decision to the self.decision queue.
         """
         self.decision.put(decision)
+        if self.current is None:
+            self.current = self.decision.get()
+            # self.time = self.current.time
 
     def make_decision(self, unit: Unit, **kwargs) -> None:
         """
         Dequeues a decision and returns the corresponding move
         """
-        print(self.decision.empty(Units.WORKER))
-        print(self.current)
-        if self.time <= 0 and not self.decision.empty(unit.type):
+        if self.current.are_u_done(unit, **kwargs):
             self.current = self.decision.get(unit.type)
-            next_move = self.current.next_move(unit, **kwargs)
-            self.time = self.current.time
-        elif self.time > 0 and self.current:
-            next_move = self.current.next_move(unit, **kwargs)
-        else:
-            self.current = None
-            next_move = None
-        self.time -= 1
-        return next_move
+        return self.current.next_move(unit, **kwargs)
 
-    def direction(self, locked: List[List[int]]) -> Direction:  #TODO #2 need to implement properly
+    def direction(self, locked: List[List[int]]) -> Direction:  # TODO #2 need to implement properly
         """
         Returns an empty location direction adjacent to Unit's position.
         """
@@ -193,10 +211,10 @@ class GameUnit:
         self.time = 0
 
     def __str__(self) -> str:
-        return self.id + ' ' + str(self.time) + ' ' + str(self.current)
+        return self.id + ' ' + str(self.current)
 
-    def available(self) -> bool:
-        return self.time <= 0
+    def available(self, unit) -> bool:
+        return self.current is None or self.current.are_u_done(unit)
 
 
 class Attack(Decision):
@@ -205,8 +223,8 @@ class Attack(Decision):
         super().__init__()
         self.where = where
 
-    def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]: 
-        #TODO #1
+    def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
+        # TODO #1
         return
 
     def __str__(self) -> str:
@@ -224,9 +242,13 @@ class Mine(Decision):
         if self.mined is False:
             self.mined = True
             return createMineMove(unit.id)
+        self.time -= 1
 
     def __str__(self) -> str:
         return 'Mine'
+
+    def are_u_done(self, unit: Unit, **kwargs) -> bool:
+        return self.time <= 0
 
 
 class GoTo(Decision):
@@ -243,7 +265,7 @@ class GoTo(Decision):
             self.path = kwargs.get('bfs')(self.current, self.destination)
             self.time = len(set(self.path) - set(self.current))
             self.path.pop(0)
-        return createDirectionMove(unit.id, direction_to(unit,self.path.pop(0)), MAX_MOVEMENT_SPEED[Units.WORKER])
+        return createDirectionMove(unit.id, direction_to(unit, self.path.pop(0)), MAX_MOVEMENT_SPEED[Units.WORKER])
 
     def reset(self):
         self.current = None
@@ -255,22 +277,28 @@ class GoTo(Decision):
 
 class Buy(Decision):
 
-    def __init__(self, piece_type: Type, direction: Direction):
+    def __init__(self, piece_type: Units):
         super().__init__()
         self.piece_type = piece_type
-        self.direction = direction
+        self.bought = False
+        self.time = 1
 
     def next_move(self, unit: Unit, **kwargs) -> Optional[Tuple[Moves, int, Type, Direction]]:
         locked = kwargs.get('locked')
         c = unit.x
         r = unit.y
         dir = None
-        for i in ((c+1, r), (c-1, r), (c, r+1), (c, r-1)):
+        for i in ((c, r + 1), (c, r - 1), (c + 1, r), (c - 1, r)):
             if is_within_map(locked, i[0], i[1]) and locked[i[1]][i[0]] != 1:
-                dir = direction_to(unit, i[0], i[1])
+                dir = direction_to(unit, i)
                 break
-        if dir is not None:
+        if dir is not None and self.bought is False:
+            self.bought = True
             return createBuyMove(unit.id, self.piece_type, dir)
+        self.time -= 1
+
+    def are_u_done(self, unit: Unit, **kwargs) -> bool:
+        return self.time <= 0
 
     def __str__(self) -> str:
         return 'Buy'
@@ -296,26 +324,27 @@ class GoToMine(Decision):
         self.destination = destination
         self.path = None
         self.mined = False
+        self.time = 2
 
     def next_move(self, unit: Unit, **kwargs) -> Union[Tuple[Moves, int, Direction, int], Tuple[Moves, int]]:
         if self.destination is None:
             self.destination = closest_resource(kwargs.get('avail_resources'), unit)
-
             kwargs.get('avail_resources')[self.destination] = unit.id
-            print(self.destination)
-        if self.path is None and self.destination is not None:
-            self.current = (unit.x, unit.y)
-            self.path = bfs(kwargs.get('locked'), self.current, self.destination)
-            self.path.pop(0)
-            self.time = len(set(self.path) - set(self.current)) + 2
-
-        if (len(self.path) == 0 or self.destination is None) and self.mined is False:
-            self.mined = True
-            return createMineMove(unit.id)
-        if len(self.path) != 0:
-            next_pos = self.path.pop(0)
+        if (unit.x, unit.y) != self.destination:
+            path = bfs(kwargs.get('locked'), (unit.x, unit.y), self.destination)
+            print(path)
+            next_pos = path[1]
             kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
-            return createDirectionMove(unit.id, direction_to(unit,next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
+            return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
+        if (unit.x, unit.y) == self.destination and self.mined is False:
+            self.mined = True
+            self.time -= 1
+            return createMineMove(unit.id)
+        if self.mined is True:
+            self.time -= 1
+
+    def are_u_done(self, unit: Unit, **kwargs):
+        return (unit.x, unit.y) == self.destination and self.time <= 0
 
     def reset(self):
         self.current = None
@@ -330,13 +359,12 @@ class Q:
     def __init__(self):
         self.queue = queue.Queue()
 
-    def get(self, unit_type: Type) -> Decision:
+    def get(self, unit_type: Type = None) -> Decision:
         """
         Returns a Mine decision if id is given otherwise pops the latest decision in <self.queue> and returns it.
         """
-        if self.queue.empty():
-            if unit_type == Units.WORKER:
-                return Mine()
+        if self.queue.empty() and unit_type == Units.WORKER:
+            return Mine()
         return self.queue.get()
 
     def put(self, item: Decision) -> None:
@@ -345,13 +373,16 @@ class Q:
         """
         self.queue.put(item)
 
-    def empty(self, type = None) -> bool:
+    def empty(self, type=None) -> bool:
         """
         Returns False if <type> given is Worker otherwise returns if <self.queue> is empty.
         """
         if type == Units.WORKER:
             return False
         return self.queue.empty()
+
+    def __str__(self) -> str:
+        return str(self.k)
 
 
 def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, int]]:
@@ -365,8 +396,8 @@ def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, i
     result = None
     so_far = 999999
     for (c_2, r_2) in locations:
-        dc = c_2-c
-        dr = r_2-r
+        dc = c_2 - c
+        dr = r_2 - r
         dist = abs(dc) + abs(dr)
         if dist < so_far:
             result = (c_2, r_2)
@@ -375,7 +406,7 @@ def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, i
 
 
 def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
-        """
+    """
         (Map, (int, int), (int, int)) -> [(int, int)]
         ### tuples are col, row , col,row
         Finds the shortest path from <start> to <dest>.
@@ -384,25 +415,27 @@ def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) ->
 
         <grid> is the locked position.
         """
-        graph = grid
-        queue = [[start]]
-        vis = set(start)
-        if start == dest or graph[start[1]][start[0]] == '1' or \
-                not (0 < start[0] < len(graph[0])-1
-                    and 0 < start[1] < len(graph)-1):
-            return None
-        while queue:
-            path = queue.pop(0)
-            node = path[-1]
+    graph = grid
+    queue = [[start]]
+    vis = set(start)
+    if start == dest or graph[start[1]][start[0]] == '1' or \
+            not (0 < start[0] < len(graph[0]) - 1
+                 and 0 < start[1] < len(graph) - 1):
+        return None
+    while queue:
+        path = queue.pop(0)
+        node = path[-1]
 
-            r = node[1]
-            c = node[0]
-            if node == dest:
-                return path
-            for adj in ((c+1, r), (c-1, r), (c, r+1), (c, r-1)):
-                if is_within_map( graph, adj[0],adj[1]) and (graph[adj[1]][adj[0]]  != '1') and adj not in vis:
-                    queue.append(path + [adj])
-                    vis.add(adj)
+        r = node[1]
+        c = node[0]
+        if node == dest:
+            return path
+        dir = [(c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)]
+        random.shuffle(dir)
+        for adj in dir:
+            if is_within_map(graph, adj[0], adj[1]) and (graph[adj[1]][adj[0]] != '1') and adj not in vis:
+                queue.append(path + [adj])
+                vis.add(adj)
 
 
 def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
@@ -411,3 +444,18 @@ def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
     """
 
     return 0 <= x < len(map[0]) and 0 <= y < len(map)
+
+
+def bipartite_graph_min_weight(source: list[Tuple[int, int, int]], target: list[Tuple[int, int]]) -> dict[int: Tuple[
+    int, int]]:
+    all_combinations = combinations(target, len(source))
+    temp = []
+    for target_combo in all_combinations:
+        lst = []
+        for index, source_combo in enumerate(source):
+            dist = abs(source_combo[1] - target_combo[index][1]) + abs(source_combo[0] - target_combo[index][0])
+            lst.append((source_combo[2], dist, target_combo[index]))  # (id, distance, target)
+        temp.append(lst)
+    min_combo = min(temp, key=lambda x: sum(i[1] for i in x))
+    min_dict = {i[0]: i[2] for i in min_combo}
+    return min_dict

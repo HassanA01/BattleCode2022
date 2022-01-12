@@ -1,4 +1,7 @@
 import json
+import os
+import sys
+import traceback
 from socket import socket
 
 
@@ -34,8 +37,10 @@ class NetworkedController(Controller):
             try:
                 moves = self.player.tick(**parsedData)
             except Exception as e:
-                
-                print("Error in client move generation, sending []")
+
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                print("Error was:", traceback.format_exc())
                 print("Error was:", e)
             data = self.encodeDataFactory.encode(moves)
             body = json.dumps(data).encode()
