@@ -13,7 +13,6 @@ from Engine.server.move import *
 
 from itertools import combinations
 
-
 class GridPlayer:
 
     def __init__(self):
@@ -27,8 +26,8 @@ class GridPlayer:
         self.locked = []
         self.initialized = False
 
-    def tick(self, game_map, your_units: Units, enemy_units: List[Unit], resources, turns_left: int, your_flag,
-             enemy_flag):
+    def tick(self, game_map: Map, your_units: Units, enemy_units: Units, resources: int, turns_left: int, your_flag: dict,
+             enemy_flag: dict):
         # Task, the player codes this
         delete, add = [], []
         if self.initialized is False:  # initalize all the stuff needed
@@ -41,10 +40,6 @@ class GridPlayer:
                     self.avail_resources[i] = -1
             self.initialize_tags(your_units)  # take cares of new and delered units
             self.initialize_locked(game_map)  # which positions are always locked
-            add = self.id_dict.values()
-            # for i in self.avail_resources:
-            #    self.queue.appendleft(GoToMine())
-            ## right now I have hardcoded this, we need to automate it
             self.queue.append(Buy(Units.WORKER))
             self.queue.append(Buy(Units.WORKER))
             self.queue.append(Buy(Units.WORKER))
@@ -160,6 +155,9 @@ class Decision:
 
     def __str__(self) -> str:
         raise NotImplementedError
+    
+    def are_u_done(self, unit: Unit, **kwargs) -> bool:
+        return
 
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return
@@ -179,7 +177,7 @@ class GameUnit:
         self.decision.put(decision)
         if self.current is None:
             self.current = self.decision.get()
-            # self.time = self.current.time
+            #self.time = self.current.time
 
     def make_decision(self, unit: Unit, **kwargs) -> None:
         """
@@ -250,7 +248,6 @@ class Mine(Decision):
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return self.time <= 0
 
-
 class GoTo(Decision):
 
     def __init__(self, destination: Tuple[int, int]):
@@ -288,7 +285,7 @@ class Buy(Decision):
         c = unit.x
         r = unit.y
         dir = None
-        for i in ((c, r + 1), (c, r - 1), (c + 1, r), (c - 1, r)):
+        for i in ((c, r + 1),(c, r - 1), (c + 1, r), (c - 1, r)):
             if is_within_map(locked, i[0], i[1]) and locked[i[1]][i[0]] != 1:
                 dir = direction_to(unit, i)
                 break
@@ -296,7 +293,7 @@ class Buy(Decision):
             self.bought = True
             return createBuyMove(unit.id, self.piece_type, dir)
         self.time -= 1
-
+    
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return self.time <= 0
 
@@ -345,6 +342,7 @@ class GoToMine(Decision):
 
     def are_u_done(self, unit: Unit, **kwargs):
         return (unit.x, unit.y) == self.destination and self.time <= 0
+            
 
     def reset(self):
         self.current = None
@@ -380,6 +378,9 @@ class Q:
         if type == Units.WORKER:
             return False
         return self.queue.empty()
+    
+    def __str__(self) -> str:
+        return str(self.k)
 
     def __str__(self) -> str:
         return str(self.k)
@@ -445,17 +446,15 @@ def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
 
     return 0 <= x < len(map[0]) and 0 <= y < len(map)
 
-
-def bipartite_graph_min_weight(source: list[Tuple[int, int, int]], target: list[Tuple[int, int]]) -> dict[int: Tuple[
-    int, int]]:
+def bipartite_graph_min_weight(source: list[Tuple[int, int, int]], target: list[Tuple[int, int]]) -> dict[int: Tuple[int, int]]:
     all_combinations = combinations(target, len(source))
     temp = []
     for target_combo in all_combinations:
         lst = []
         for index, source_combo in enumerate(source):
-            dist = abs(source_combo[1] - target_combo[index][1]) + abs(source_combo[0] - target_combo[index][0])
-            lst.append((source_combo[2], dist, target_combo[index]))  # (id, distance, target)
+            dist = abs(source_combo[1]-target_combo[index][1]) + abs(source_combo[0] - target_combo[index][0])
+            lst.append((source_combo[2], dist, target_combo[index])) # (id, distance, target)
         temp.append(lst)
-    min_combo = min(temp, key=lambda x: sum(i[1] for i in x))
+    min_combo = min(temp, key= lambda x: sum(i[1] for i in x))
     min_dict = {i[0]: i[2] for i in min_combo}
     return min_dict
