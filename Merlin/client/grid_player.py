@@ -68,7 +68,7 @@ class GridPlayer:
             if j.available(your_units.get_unit(j.get_id())) and self.queue:
                 j.add_decision(self.queue.pop())
         lst = [i.make_decision(your_units.get_unit(i.id), game_map=game_map, avail_resources=self.avail_resources,
-                               locked=locked) for i in self.id_dict.values()]
+                               locked=locked, enemy_units=enemy_units) for i in self.id_dict.values()]
         self.count += 1
         lst = list(filter((None).__ne__, lst))
         return lst
@@ -218,14 +218,55 @@ class GameUnit:
 
 
 class Attack(Decision):
+    """
+    currently just a simple program that attacks the nearest enemy unit. Otherwise does nothing.
+    """
 
     def __init__(self, where: Tuple[int, int]):
         super().__init__()
         self.where = where
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
-        # TODO #1
-        return
+        enemy_units = kwargs.get('enemy_units')
+        locked = kwargs.get('locked')
+        enemy_ids = enemy_units.get_all_unit_ids()
+        if len(enemy_ids) == 0:
+            return
+        closest = 1000
+        position = (0, 0)
+        r, c = unit.pos_tuple
+
+        if unit.type == Units.KNIGHT:
+
+            for enemy_id in enemy_ids:
+                x, y = enemy_units.get(enemy_id).pos_tuple
+                if abs(x - r) == 1 and y == c:
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+                elif x == r and abs(y - c) == 1:
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+
+                distance = len(bfs(locked, (r, c), (x, y)))
+                if distance < closest:
+                    closest = distance
+                    position = (x, y)
+
+                distance = len(bfs(locked, (r, c), position))
+                return createDirectionMove(unit.id, direction_to(unit, distance[0]), 1)
+        elif unit.type == Units.ARCHER:
+            for enemy_id in enemy_ids:
+                x, y = enemy_units.get(enemy_id).pos_tuple
+                if abs(x - r) <= 2 and y == c:
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+                elif x == r and abs(y-c) <= 2:
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+
+                distance = len(bfs(locked, (r, c), (x, y)))
+                if distance < closest:
+                    closest = distance
+                    position = (x, y)
+
+                distance = len(bfs(locked, (r, c), position))
+                return createDirectionMove(unit.id, direction_to(unit, distance[0]), 1)
 
     def __str__(self) -> str:
         return 'Attack'

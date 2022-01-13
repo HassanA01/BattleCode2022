@@ -2,7 +2,7 @@
 
 from Engine.server.move import Move
 
-from game.constants import Moves, Direction, Units
+from game.constants import  Moves, Direction, Units
 class MerlinMoveFactory:
     def createMove(self, moveid:int, restInfo):
         '''
