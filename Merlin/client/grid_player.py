@@ -5,7 +5,7 @@ import queue
 import copy
 from collections import deque
 import random
-from typing import List, Tuple, Type, Union, Optional
+from typing import List, Tuple, Type, Union, Optional, Dict
 
 from game.constants import *
 
@@ -155,7 +155,7 @@ class Decision:
 
     def __str__(self) -> str:
         raise NotImplementedError
-    
+
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return
 
@@ -334,7 +334,7 @@ class Buy(Decision):
             self.bought = True
             return createBuyMove(unit.id, self.piece_type, dir)
         self.time -= 1
-    
+
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return self.time <= 0
 
@@ -383,7 +383,7 @@ class GoToMine(Decision):
 
     def are_u_done(self, unit: Unit, **kwargs):
         return (unit.x, unit.y) == self.destination and self.time <= 0
-            
+
 
     def reset(self):
         self.current = None
@@ -419,7 +419,7 @@ class Q:
         if type == Units.WORKER:
             return False
         return self.queue.empty()
-    
+
     def __str__(self) -> str:
         return str(self.k)
 
@@ -487,15 +487,16 @@ def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
 
     return 0 <= x < len(map[0]) and 0 <= y < len(map)
 
-def bipartite_graph_min_weight(source: list[Tuple[int, int, int]], target: list[Tuple[int, int]]) -> dict[int: Tuple[int, int]]:
-    all_combinations = combinations(target, len(source))
-    temp = []
-    for target_combo in all_combinations:
-        lst = []
-        for index, source_combo in enumerate(source):
-            dist = abs(source_combo[1]-target_combo[index][1]) + abs(source_combo[0] - target_combo[index][0])
-            lst.append((source_combo[2], dist, target_combo[index])) # (id, distance, target)
-        temp.append(lst)
-    min_combo = min(temp, key= lambda x: sum(i[1] for i in x))
-    min_dict = {i[0]: i[2] for i in min_combo}
-    return min_dict
+
+# def bipartite_graph_min_weight(source: List[Tuple[int, int, int]], target: List[Tuple[int, int]]) -> Dict[int: Tuple[int, int]]:
+#     all_combinations = combinations(target, len(source))
+#     temp = []
+#     for target_combo in all_combinations:
+#         lst = []
+#         for index, source_combo in enumerate(source):
+#             dist = abs(source_combo[1] - target_combo[index][1]) + abs(source_combo[0] - target_combo[index][0])
+#             lst.append((source_combo[2], dist, target_combo[index]))  # (id, distance, target)
+#         temp.append(lst)
+#     min_combo = min(temp, key=lambda x: sum(i[1] for i in x))
+#     min_dict = {i[0]: i[2] for i in min_combo}
+#     return min_dict
