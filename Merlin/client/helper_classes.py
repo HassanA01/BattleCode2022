@@ -225,6 +225,7 @@ class Units:
                 all_units.append(self.units[id])
         return all_units
 
+
 def direction_to(unit, pos:(int,int)):
     """
     Returns a required direction from a unit to <pos> (x,y).

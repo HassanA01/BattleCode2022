@@ -13,6 +13,7 @@ from Engine.server.move import *
 
 from itertools import combinations
 
+
 class GridPlayer:
 
     def __init__(self):
@@ -25,8 +26,11 @@ class GridPlayer:
         self.queue = deque()
         self.locked = []
         self.initialized = False
+        self.buy = []
+        self.guard = []
 
-    def tick(self, game_map: Map, your_units: Units, enemy_units: Units, resources: int, turns_left: int, your_flag: dict,
+    def tick(self, game_map: Map, your_units: Units, enemy_units: Units, resources: int, turns_left: int,
+             your_flag: dict,
              enemy_flag: dict):
         # Task, the player codes this
         delete, add = [], []
@@ -38,34 +42,45 @@ class GridPlayer:
                     self.enemy_resources[i] = -1
                 else:
                     self.avail_resources[i] = -1
-            self.initialize_tags(your_units)  # take cares of new and delered units
+            # self.initialize_tags(your_units)  # take cares of new and deleted units
             self.initialize_locked(game_map)  # which positions are always locked
-            self.queue.append(Buy(Units.WORKER))
-            self.queue.append(Buy(Units.WORKER))
-            self.queue.append(Buy(Units.WORKER))
-            self.queue.appendleft(GoToMine())
-            self.queue.appendleft(GoToMine())
-            self.queue.appendleft(GoToMine())
-            self.queue.appendleft(GoToMine())
-            self.queue.appendleft(GoToMine())
-            self.queue.append(Buy(Units.WORKER))
+            c = your_flag['y']
+            r = your_flag['x']
+            self.guard.append((r, c))
+            print(self.guard)
+            self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.WORKER))
+            self.buy.append(Buy(Units.WORKER))
+            self.buy.append(Buy(Units.WORKER))
+            self.buy.append(Buy(Units.WORKER))
+            self.buy.append(Buy(Units.WORKER))
+            self.buy.append(Buy(Units.WORKER))
         print("turn taken: ", self.count)
-        print('universal q', self.queue)
-        if self.initialized:
-            add, delete = self.adding_tags(your_units)
-        locked = self.update_locked(enemy_units)
-        self.initialize_decision(your_units)
+        add2 = {Units.WORKER: [], Units.ARCHER: [], Units.KNIGHT: [], Units.SCOUT: []}
+        add, delete = self.adding_tags(your_units)
         for i in add:
-            eoeo = self.queue.pop()
-            print('popped from universal q: ', eoeo, 'for ', i.get_id())
-            i.add_decision(eoeo)
+            add2[your_units.get_unit(i.get_id()).type].append(i)
+        print(add2)
+        locked = self.update_locked(enemy_units)
+        # locked = copy.deepcopy(self.locked)
+        self.initialize_decision(your_units)
+        for i in add2[Units.WORKER]:
+            if self.buy and i.direction(your_units.get_unit(i.get_id()), locked):
+                i.add_decision(self.buy.pop())
+            i.add_decision(GoToMine())
+        for i in add2[Units.KNIGHT]:
+            if self.guard:
+                i.add_decision(GoTo(self.guard.pop(0)))
         for j in self.id_dict.values():
-            if j.available(your_units.get_unit(j.get_id())) and self.queue:
-                j.add_decision(self.queue.pop())
+            if j.available(your_units.get_unit(j.get_id())) and self.buy:
+                j.add_decision(self.buy.pop())
         lst = [i.make_decision(your_units.get_unit(i.id), game_map=game_map, avail_resources=self.avail_resources,
                                locked=locked, enemy_units=enemy_units) for i in self.id_dict.values()]
         self.count += 1
         lst = list(filter((None).__ne__, lst))
+        print(lst)
+        # for i in locked:
+        #    print(''.join(str(e) for e in i))
         return lst
 
     def initialize_locked(self, game_map: Map) -> None:
@@ -76,13 +91,14 @@ class GridPlayer:
         for i in game_map.grid:
             self.locked.append([1 if j == 'X' else 0 for j in i])
 
-    def update_locked(self, enemy_units: List[Unit]) -> List[List[int]]:
+    def update_locked(self, enemy_units: Units) -> List[List[int]]:
         """
         Updates the map with the enemy positions and sets positions as 1 (blocked) and returns the updated list.
         """
         locked = copy.deepcopy(self.locked)
-        for i in enemy_units.units:
-            locked[i.x][i.y] = 1
+        for i in enemy_units.get_all_unit_ids():
+            unit = enemy_units.get_unit(i)
+            locked[unit.y][unit.x] = 1
         return locked
 
     def initialize_decision(self, your_units: List[Unit]) -> None:
@@ -102,11 +118,11 @@ class GridPlayer:
             if self.dead_tasks[temp.type]:
                 temp.decision = self.dead_tasks[temp.type].pop()
 
-    def adding_tags(self, your_units: List[Unit]) -> Tuple[List[Unit], List[Unit]]:
+    def adding_tags(self, your_units: Units) -> Tuple[List[Unit], List[Unit]]:
         """
         takes systems ids, map them to our own id system, if it has some new ids, get units info,
         assign them new ids in our system. If its a new ID, give a custom new ID in our system as well.
-        If ID is not seen on map then clear ID from hashmap ( worker has been destroyed ).
+        If ID is not seen on mp then clear ID from hashmap ( worker has been destroyed ).
         Returns all the GameUnits that have been deleted and all GameUnits that have been created
         """
         temp_dict = set(your_units.get_all_unit_ids()) - set(self.id_dict.keys())
@@ -177,21 +193,30 @@ class GameUnit:
         self.decision.put(decision)
         if self.current is None:
             self.current = self.decision.get()
-            #self.time = self.current.time
+            # self.time = self.current.time
 
     def make_decision(self, unit: Unit, **kwargs) -> None:
         """
         Dequeues a decision and returns the corresponding move
         """
+        if self.current is None:
+            return
         if self.current.are_u_done(unit, **kwargs):
             self.current = self.decision.get(unit.type)
         return self.current.next_move(unit, **kwargs)
 
-    def direction(self, locked: List[List[int]]) -> Direction:  # TODO #2 need to implement properly
+    def direction(self, unit: Unit, locked: List[List[int]]) -> Direction:  # TODO #2 need to implement properly
         """
         Returns an empty location direction adjacent to Unit's position.
         """
-        return Direction.DOWN
+        c = unit.x
+        r = unit.y
+        dir = None
+        for i in ((c, r + 1), (c, r - 1), (c + 1, r), (c - 1, r)):
+            if is_within_map(locked, i[0], i[1]) and locked[i[1]][i[0]] != 1:
+                dir = direction_to(unit, i)
+                break
+        return dir
 
     def get_id(self) -> int:
         """
@@ -220,28 +245,32 @@ class Attack(Decision):
     currently just a simple program that attacks the nearest enemy unit. Otherwise does nothing.
     """
 
-    def __init__(self, where: Tuple[int, int]):
+    def __init__(self, where: Tuple[int, int] = None):
         super().__init__()
         self.where = where
+
+    def are_u_done(self, unit, **kwargs):
+        return False
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
         enemy_units = kwargs.get('enemy_units')
         locked = kwargs.get('locked')
+        k = unit.position()
+        kwargs.get('locked')[k[1]][k[0]] = 1
         enemy_ids = enemy_units.get_all_unit_ids()
         if len(enemy_ids) == 0:
             return
         closest = 1000
         position = (0, 0)
-        r, c = unit.pos_tuple
+        r, c = unit.position()
 
         if unit.type == Units.KNIGHT:
-
             for enemy_id in enemy_ids:
-                x, y = enemy_units.get(enemy_id).pos_tuple
+                x, y = enemy_units.get_unit(enemy_id).position()
                 if abs(x - r) == 1 and y == c:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
                 elif x == r and abs(y - c) == 1:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
 
                 distance = len(bfs(locked, (r, c), (x, y)))
                 if distance < closest:
@@ -254,9 +283,9 @@ class Attack(Decision):
             for enemy_id in enemy_ids:
                 x, y = enemy_units.get(enemy_id).pos_tuple
                 if abs(x - r) <= 2 and y == c:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
-                elif x == r and abs(y-c) <= 2:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x-r))
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                elif x == r and abs(y - c) <= 2:
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
 
                 distance = len(bfs(locked, (r, c), (x, y)))
                 if distance < closest:
@@ -278,10 +307,10 @@ class Mine(Decision):
         self.mined = False
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int]:
+        self.time -= 1
         if self.mined is False:
             self.mined = True
             return createMineMove(unit.id)
-        self.time -= 1
 
     def __str__(self) -> str:
         return 'Mine'
@@ -289,25 +318,31 @@ class Mine(Decision):
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return self.time <= 0
 
+
 class GoTo(Decision):
 
     def __init__(self, destination: Tuple[int, int]):
         super().__init__()
-        self.current = None
         self.destination = destination
-        self.path = None
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
-        if self.path is None:
-            self.current = (unit.x, unit.y)
-            self.path = kwargs.get('bfs')(self.current, self.destination)
-            self.time = len(set(self.path) - set(self.current))
-            self.path.pop(0)
-        return createDirectionMove(unit.id, direction_to(unit, self.path.pop(0)), MAX_MOVEMENT_SPEED[Units.WORKER])
+        k = unit.position()
+        kwargs.get('locked')[k[1]][k[0]] = 1
+        if k != self.destination:
+            # bfs1 = kwargs.get('game_map')
+            path = bfs(kwargs.get('locked'), k, self.destination)
+            if path is None:
+                return
+            next_pos = path[1]
+            kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
+            return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
 
     def reset(self):
         self.current = None
         self.path = None
+
+    def are_u_done(self, unit: Unit, **kwargs):
+        return unit.position() == self.destination
 
     def __str__(self) -> str:
         return 'GoTo'
@@ -322,18 +357,18 @@ class Buy(Decision):
         self.time = 1
 
     def next_move(self, unit: Unit, **kwargs) -> Optional[Tuple[Moves, int, Type, Direction]]:
+        self.time -= 1
         locked = kwargs.get('locked')
         c = unit.x
         r = unit.y
         dir = None
-        for i in ((c, r + 1),(c, r - 1), (c + 1, r), (c - 1, r)):
+        for i in ((c, r + 1), (c, r - 1), (c + 1, r), (c - 1, r)):
             if is_within_map(locked, i[0], i[1]) and locked[i[1]][i[0]] != 1:
                 dir = direction_to(unit, i)
                 break
         if dir is not None and self.bought is False:
             self.bought = True
             return createBuyMove(unit.id, self.piece_type, dir)
-        self.time -= 1
 
     def are_u_done(self, unit: Unit, **kwargs) -> bool:
         return self.time <= 0
@@ -358,32 +393,34 @@ class GoToMine(Decision):
 
     def __init__(self, destination: Tuple[int, int] = None):
         super().__init__()
-        self.current = None
         self.destination = destination
-        self.path = None
         self.mined = False
         self.time = 2
 
     def next_move(self, unit: Unit, **kwargs) -> Union[Tuple[Moves, int, Direction, int], Tuple[Moves, int]]:
+        k = unit.position()
+        kwargs.get('locked')[k[1]][k[0]] = 1
         if self.destination is None:
+            print(kwargs.get('avail_resources'))
             self.destination = closest_resource(kwargs.get('avail_resources'), unit)
             kwargs.get('avail_resources')[self.destination] = unit.id
         if (unit.x, unit.y) != self.destination:
+            # bfs1 = kwargs.get('game_map')
             path = bfs(kwargs.get('locked'), (unit.x, unit.y), self.destination)
-            print(path)
+            print(unit.id, path)
             next_pos = path[1]
             kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
             return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
         if (unit.x, unit.y) == self.destination and self.mined is False:
             self.mined = True
             self.time -= 1
+
             return createMineMove(unit.id)
         if self.mined is True:
             self.time -= 1
 
     def are_u_done(self, unit: Unit, **kwargs):
         return (unit.x, unit.y) == self.destination and self.time <= 0
-
 
     def reset(self):
         self.current = None
@@ -404,6 +441,8 @@ class Q:
         """
         if self.queue.empty() and unit_type == Units.WORKER:
             return Mine()
+        if self.queue.empty() and unit_type == Units.KNIGHT:
+            return Attack()
         return self.queue.get()
 
     def put(self, item: Decision) -> None:
@@ -417,6 +456,8 @@ class Q:
         Returns False if <type> given is Worker otherwise returns if <self.queue> is empty.
         """
         if type == Units.WORKER:
+            return False
+        if type == Units.KNIGHT:
             return False
         return self.queue.empty()
 
@@ -460,7 +501,7 @@ def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) ->
     graph = grid
     queue = [[start]]
     vis = set(start)
-    if start == dest or graph[start[1]][start[0]] == '1' or \
+    if start == dest or \
             not (0 < start[0] < len(graph[0]) - 1
                  and 0 < start[1] < len(graph) - 1):
         return None
@@ -472,10 +513,8 @@ def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) ->
         c = node[0]
         if node == dest:
             return path
-        dir = [(c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)]
-        random.shuffle(dir)
-        for adj in dir:
-            if is_within_map(graph, adj[0], adj[1]) and (graph[adj[1]][adj[0]] != '1') and adj not in vis:
+        for adj in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
+            if is_within_map(graph, adj[0], adj[1]) and (graph[adj[1]][adj[0]] != 1) and adj not in vis:
                 queue.append(path + [adj])
                 vis.add(adj)
 
@@ -488,15 +527,9 @@ def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
     return 0 <= x < len(map[0]) and 0 <= y < len(map)
 
 
-# def bipartite_graph_min_weight(source: List[Tuple[int, int, int]], target: List[Tuple[int, int]]) -> Dict[int: Tuple[int, int]]:
-#     all_combinations = combinations(target, len(source))
-#     temp = []
-#     for target_combo in all_combinations:
-#         lst = []
-#         for index, source_combo in enumerate(source):
-#             dist = abs(source_combo[1] - target_combo[index][1]) + abs(source_combo[0] - target_combo[index][0])
-#             lst.append((source_combo[2], dist, target_combo[index]))  # (id, distance, target)
-#         temp.append(lst)
-#     min_combo = min(temp, key=lambda x: sum(i[1] for i in x))
-#     min_dict = {i[0]: i[2] for i in min_combo}
-#     return min_dict
+# def bipartite_graph_min_weight(source: List[Tuple[int, int, int]], target: List[Tuple[int, int]]) -> Dict[int:
+# Tuple[int, int]]: all_combinations = combinations(target, len(source)) temp = [] for target_combo in
+# all_combinations: lst = [] for index, source_combo in enumerate(source): dist = abs(source_combo[1] - target_combo[
+# index][1]) + abs(source_combo[0] - target_combo[index][0]) lst.append((source_combo[2], dist, target_combo[index]))
+# (id, distance, target) temp.append(lst) min_combo = min(temp, key=lambda x: sum(i[1] for i in x)) min_dict = {i[0]:
+# i[2] for i in min_combo} return min_dict
