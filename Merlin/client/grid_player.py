@@ -1,3 +1,5 @@
+import math
+
 from .helper_classes import *
 from Engine.client.unit import Unit
 from game.constants import *
@@ -44,10 +46,12 @@ class GridPlayer:
                     self.avail_resources[i] = -1
             # self.initialize_tags(your_units)  # take cares of new and deleted units
             self.initialize_locked(game_map)  # which positions are always locked
-            c = your_flag['y']
-            r = your_flag['x']
+            c = enemy_flag['y']
+            r = enemy_flag['x']
             self.guard.append((r, c))
-            print(self.guard)
+            self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.KNIGHT))
             self.buy.append(Buy(Units.KNIGHT))
             self.buy.append(Buy(Units.WORKER))
             self.buy.append(Buy(Units.WORKER))
@@ -60,7 +64,6 @@ class GridPlayer:
         add, delete = self.adding_tags(your_units)
         for i in add:
             add2[your_units.get_unit(i.get_id()).type].append(i)
-        print(add2)
         locked = self.update_locked(enemy_units)
         # locked = copy.deepcopy(self.locked)
         self.initialize_decision(your_units)
@@ -71,16 +74,35 @@ class GridPlayer:
         for i in add2[Units.KNIGHT]:
             if self.guard:
                 i.add_decision(GoTo(self.guard.pop(0)))
+            else:
+                i.add_decision(Attack())
         for j in self.id_dict.values():
-            if j.available(your_units.get_unit(j.get_id())) and self.buy:
+            if j.available(your_units.get_unit(j.get_id())) and self.buy and your_units.get_unit(
+                    j.get_id()).type == Units.WORKER:
                 j.add_decision(self.buy.pop())
-        lst = [i.make_decision(your_units.get_unit(i.id), game_map=game_map, avail_resources=self.avail_resources,
-                               locked=locked, enemy_units=enemy_units) for i in self.id_dict.values()]
+        lst = []
+        for i in self.id_dict.values():
+            k = your_units.get_unit(i.id).position()
+            t = i.make_decision(your_units.get_unit(i.id), game_map=game_map, avail_resources=self.avail_resources,
+                                locked=locked, enemy_units=enemy_units)
+            #print(i.id, your_units.get_unit(i.id).type, t)
+            locked[k[1]][k[0]] = 1
+            # if t[0] in (Moves.ATTACK, Moves.BUY, Moves.MINE, Moves.CAPTURE):
+            #     locked[k[1]][k[0]] = 1
+            # print(t[0] == Moves.DIRECTION)
+            if t is not None and t[0] == Moves.DIRECTION:
+                coord = coordinate_from_direction(k[0], k[1], t[2])
+                print(coord)
+                locked[coord[1]][coord[0]] = 1
+
+            lst.append(t)
+        # print(your_units.units)
+        # for i in locked:
+        # print(''.join(str(e) for e in i))
         self.count += 1
         lst = list(filter((None).__ne__, lst))
-        print(lst)
-        # for i in locked:
-        #    print(''.join(str(e) for e in i))
+        # print(lst)
+
         return lst
 
     def initialize_locked(self, game_map: Map) -> None:
@@ -257,7 +279,7 @@ class Attack(Decision):
         enemy_units = kwargs.get('enemy_units')
         locked = kwargs.get('locked')
         k = unit.position()
-        kwargs.get('locked')[k[1]][k[0]] = 1
+        #kwargs.get('locked')[k[1]][k[0]] = 1
         enemy_ids = enemy_units.get_all_unit_ids()
         if len(enemy_ids) == 0:
             return createDirectionMove(unit.id, get_random_direction(), 1)
@@ -336,14 +358,14 @@ class GoTo(Decision):
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
         k = unit.position()
-        kwargs.get('locked')[k[1]][k[0]] = 1
+        #kwargs.get('locked')[k[1]][k[0]] = 1
         if k != self.destination:
             # bfs1 = kwargs.get('game_map')
             path = bfs(kwargs.get('locked'), k, self.destination)
             if path is None:
                 return
             next_pos = path[1]
-            kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
+           # kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
             return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
 
     def reset(self):
@@ -408,7 +430,7 @@ class GoToMine(Decision):
 
     def next_move(self, unit: Unit, **kwargs) -> Union[Tuple[Moves, int, Direction, int], Tuple[Moves, int]]:
         k = unit.position()
-        kwargs.get('locked')[k[1]][k[0]] = 1
+        #kwargs.get('locked')[k[1]][k[0]] = 1
         if self.destination is None:
             print(kwargs.get('avail_resources'))
             self.destination = closest_resource(kwargs.get('avail_resources'), unit)
@@ -418,7 +440,7 @@ class GoToMine(Decision):
             path = bfs(kwargs.get('locked'), (unit.x, unit.y), self.destination)
             print(unit.id, path)
             next_pos = path[1]
-            kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
+          #  kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
             return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
         if (unit.x, unit.y) == self.destination and self.mined is False:
             self.mined = True
@@ -473,8 +495,50 @@ class Q:
     def __str__(self) -> str:
         return str(self.k)
 
-    def __str__(self) -> str:
-        return str(self.k)
+
+class Scouting(Decision):
+
+    def __init__(self, game_map, locked):
+        super().__init__()
+
+
+def scout_path(game_map: Map, locked: List[List[int]], pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+    """
+    Computes a lurker path for scout to basically run around the map getting info, attracting and distracting
+    enemy Units.
+
+    :param game_map: a matrix of coordinates of the game map
+    :param locked: a matrix of coordinates of game map with locked coordinates
+    :param pos: position of Scout unit.
+    :return: A path the scout will travel
+    """
+    before_flag_path = []
+    after_flag_path = []
+    resources = game_map.find_all_resources()
+    index = len(resources) - 1
+    while index > 0:
+        closest = min_distance(pos, resources)
+        path = bfs(locked, pos, closest)
+        resources.remove(closest)
+        index -= 1
+    return before_flag_path + after_flag_path
+
+
+def min_distance(pos1: Tuple[int, int], resources: List[Tuple[int, int]]) -> Tuple[int, int]:
+    """
+    Gets the closest resource from the units position.
+
+    :param pos1: Position of Unit that will move
+    :param resources: List of all the resources on the map
+    :return: Returns the position of the closest resource.
+    """
+
+    closest = 999999
+
+    for pos2 in resources:
+        if math.sqrt((pos2[1] - pos1[1]) ** 2 - (pos2[0] - pos1[0]) ** 2) < closest:
+            closest = pos2
+    return closest
 
 
 def closest_resource(avail_resources: dict, unit: Unit) -> Optional[Tuple[int, int]]:
@@ -534,7 +598,6 @@ def is_within_map(map: List[List[int]], x: int, y: int) -> bool:
     """
 
     return 0 <= x < len(map[0]) and 0 <= y < len(map)
-
 
 # def bipartite_graph_min_weight(source: List[Tuple[int, int, int]], target: List[Tuple[int, int]]) -> Dict[int:
 # Tuple[int, int]]: all_combinations = combinations(target, len(source)) temp = [] for target_combo in
