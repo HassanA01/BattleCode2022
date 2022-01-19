@@ -248,6 +248,7 @@ class Attack(Decision):
     def __init__(self, where: Tuple[int, int] = None):
         super().__init__()
         self.where = where
+        self.pref = None
 
     def are_u_done(self, unit, **kwargs):
         return False
@@ -259,26 +260,32 @@ class Attack(Decision):
         kwargs.get('locked')[k[1]][k[0]] = 1
         enemy_ids = enemy_units.get_all_unit_ids()
         if len(enemy_ids) == 0:
-            return
+            return createDirectionMove(unit.id, get_random_direction(), 1)
         closest = 1000
-        position = (0, 0)
+        position = unit.position()
         r, c = unit.position()
 
         if unit.type == Units.KNIGHT:
             for enemy_id in enemy_ids:
                 x, y = enemy_units.get_unit(enemy_id).position()
                 if abs(x - r) == 1 and y == c:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
                 elif x == r and abs(y - c) == 1:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
 
-                distance = len(bfs(locked, (r, c), (x, y)))
-                if distance < closest:
-                    closest = distance
-                    position = (x, y)
+                distance = bfs(locked, (r, c), (x, y))
+                if distance is not None:
+                    if len(distance) < closest:
+                        closest = len(distance)
+                        position = (x, y)
 
-                distance = len(bfs(locked, (r, c), position))
-                return createDirectionMove(unit.id, direction_to(unit, distance[0]), 1)
+            distance = bfs(locked, (r, c), position)
+
+            if distance is not None:
+                return createDirectionMove(unit.id, direction_to(unit, distance[1]), 1)
+            else:
+                return createDirectionMove(unit.id, get_random_direction(), 1)
+
         elif unit.type == Units.ARCHER:
             for enemy_id in enemy_ids:
                 x, y = enemy_units.get(enemy_id).pos_tuple
@@ -287,13 +294,15 @@ class Attack(Decision):
                 elif x == r and abs(y - c) <= 2:
                     return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
 
-                distance = len(bfs(locked, (r, c), (x, y)))
-                if distance < closest:
-                    closest = distance
+                distance = bfs(locked, (r, c), (x, y))
+                if distance is not None and len(distance) < closest:
+                    closest = len(distance)
                     position = (x, y)
 
-                distance = len(bfs(locked, (r, c), position))
-                return createDirectionMove(unit.id, direction_to(unit, distance[0]), 1)
+            distance = bfs(locked, (r, c), position)
+            if distance is None:
+                return
+            return createDirectionMove(unit.id, direction_to(unit, distance[0]), 1)
 
     def __str__(self) -> str:
         return 'Attack'
@@ -514,7 +523,7 @@ def bfs(grid: List[List[int]], start: Tuple[int, int], dest: Tuple[int, int]) ->
         if node == dest:
             return path
         for adj in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
-            if is_within_map(graph, adj[0], adj[1]) and (graph[adj[1]][adj[0]] != 1) and adj not in vis:
+            if is_within_map(graph, adj[0], adj[1]) and adj not in vis and (graph[adj[1]][adj[0]] != 1 or adj == dest):
                 queue.append(path + [adj])
                 vis.add(adj)
 
