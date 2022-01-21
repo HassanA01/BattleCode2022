@@ -1,4 +1,5 @@
 import math
+from re import I
 
 from .helper_classes import *
 from Engine.client.unit import Unit
@@ -30,6 +31,7 @@ class GridPlayer:
         self.initialized = False
         self.buy = []
         self.guard = []
+        self.protect = dict()
 
     def tick(self, game_map: Map, your_units: Units, enemy_units: Units, resources: int, turns_left: int,
              your_flag: dict,
@@ -46,13 +48,31 @@ class GridPlayer:
                     self.avail_resources[i] = -1
             # self.initialize_tags(your_units)  # take cares of new and deleted units
             self.initialize_locked(game_map)  # which positions are always locked
-            c = enemy_flag['y']
-            r = enemy_flag['x']
-            self.guard.append((r, c))
+            pos = 1
+            if (your_flag['y'] > half_grid):
+                pos = -1
+            c = your_flag['y']
+            r = your_flag['x']
+            self.guard.append(StandbyGaurd(r + 1, c))
+            self.guard.append(StandbyGaurd(r - 1, c))
+            self.guard.append(StandbyGaurd(r, c + pos))
+            for i in self.enemy_resources:
+                self.guard.append(StandbyGaurd(i, 2))
+            # self.guard.append(StandbyGaurd((r, c), 2))
+            # self.guard.append(StandbyGaurd((your_flag['x'], your_flag['y']),2))
             self.buy.append(Buy(Units.KNIGHT))
             self.buy.append(Buy(Units.KNIGHT))
             self.buy.append(Buy(Units.KNIGHT))
             self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.KNIGHT))
+            # self.buy.append(Buy(Units.KNIGHT))
+            # self.buy.append(Buy(Units.KNIGHT))
+            # self.buy.append(Buy(Units.KNIGHT))
+            # self.buy.append(Buy(Units.KNIGHT))
+            self.buy.append(Buy(Units.WORKER))
+            self.buy.append(Buy(Units.WORKER))
             self.buy.append(Buy(Units.WORKER))
             self.buy.append(Buy(Units.WORKER))
             self.buy.append(Buy(Units.WORKER))
@@ -63,38 +83,55 @@ class GridPlayer:
         add2 = {Units.WORKER: [], Units.ARCHER: [], Units.KNIGHT: [], Units.SCOUT: []}
         add, delete = self.adding_tags(your_units)
         for i in add:
+            self.protect[i.get_id()] = []
             add2[your_units.get_unit(i.get_id()).type].append(i)
         locked = self.update_locked(enemy_units)
         # locked = copy.deepcopy(self.locked)
         self.initialize_decision(your_units)
         for i in add2[Units.WORKER]:
+            print(i)
+
             if self.buy and i.direction(your_units.get_unit(i.get_id()), locked):
                 i.add_decision(self.buy.pop())
             i.add_decision(GoToMine())
         for i in add2[Units.KNIGHT]:
             if self.guard:
-                i.add_decision(GoTo(self.guard.pop(0)))
+                i.add_decision(self.guard.pop(0))
             else:
                 i.add_decision(Attack())
         for j in self.id_dict.values():
             if j.available(your_units.get_unit(j.get_id())) and self.buy and your_units.get_unit(
                     j.get_id()).type == Units.WORKER:
                 j.add_decision(self.buy.pop())
+            if j.available(your_units.get_unit(j.get_id())) and not self.buy and your_units.get_unit(
+                    j.get_id()).type == Units.WORKER:
+                c, r = your_units.get_unit(j.get_id()).position()
+                print(self.protect[j.get_id()])
+                if len(self.protect[j.get_id()]) < 4:
+                    for x, y in ((c, r + 2), (c, r - 2), (c + 2, r), (c - 2, r)):
+                        if is_within_map(locked, x, y) and (x, y) not in self.protect[j.get_id()]:
+                            self.guard.append(StandbyGaurd((x, y), 2))
+                            j.add_decision(Buy(Units.KNIGHT))
+                            self.protect[j.get_id()].append((x, y))
+                            break
+
         lst = []
         for i in self.id_dict.values():
             k = your_units.get_unit(i.id).position()
             t = i.make_decision(your_units.get_unit(i.id), game_map=game_map, avail_resources=self.avail_resources,
-                                locked=locked, enemy_units=enemy_units)
-            #print(i.id, your_units.get_unit(i.id).type, t)
+                                locked=locked, enemy_units=enemy_units, your_units=your_units)
+            print(i.id, your_units.get_unit(i.id).type, t)
             locked[k[1]][k[0]] = 1
             # if t[0] in (Moves.ATTACK, Moves.BUY, Moves.MINE, Moves.CAPTURE):
             #     locked[k[1]][k[0]] = 1
             # print(t[0] == Moves.DIRECTION)
             if t is not None and t[0] == Moves.DIRECTION:
                 coord = coordinate_from_direction(k[0], k[1], t[2])
-                print(coord)
+                # locked[k[1]][k[0]] = 0
                 locked[coord[1]][coord[0]] = 1
 
+            if t is None and your_units.get_unit(i.id).type == Units.KNIGHT:
+                t = createUpgradeMove(i.id)
             lst.append(t)
         # print(your_units.units)
         # for i in locked:
@@ -152,6 +189,7 @@ class GridPlayer:
         for i in temp_dict:
             game_unit = GameUnit(i)
             self.id_dict[i] = game_unit
+
             lst1.append(game_unit)
         lst = list()  # Deleted units (not on the board)
         temp = set(self.id_dict) - set(your_units.get_all_unit_ids())
@@ -221,6 +259,7 @@ class GameUnit:
         """
         Dequeues a decision and returns the corresponding move
         """
+        print('decision', self.decision)
         if self.current is None:
             return
         if self.current.are_u_done(unit, **kwargs):
@@ -279,31 +318,57 @@ class Attack(Decision):
         enemy_units = kwargs.get('enemy_units')
         locked = kwargs.get('locked')
         k = unit.position()
-        #kwargs.get('locked')[k[1]][k[0]] = 1
+        # kwargs.get('locked')[k[1]][k[0]] = 1
         enemy_ids = enemy_units.get_all_unit_ids()
+        r, c = unit.position()
         if len(enemy_ids) == 0:
-            return createDirectionMove(unit.id, get_random_direction(), 1)
+            if self.dest is None:
+                return createDirectionMove(unit.id, get_random_direction(), 1)
+            elif (r, c) == self.dest:
+                self.dest = None
+                return createDirectionMove(unit.id, get_random_direction(), 1)
+            else:
+                distance = bfs(locked, (r, c), self.dest)
+                if distance is not None and unit.type == UNITS.KNIGHT:
+                    if len(distance) > 3 and direction_to(unit, distance[1]) == direction_to(unit, distance[2]):
+                        return createDirectionMove(unit.id, direction_to(unit, distance[1]), 2)
+                    return createDirectionMove(unit.id, direction_to(unit, distance[1]), 1)
+
         closest = 1000
         position = unit.position()
-        r, c = unit.position()
-
+        self.dest = None
         if unit.type == Units.KNIGHT:
-            for enemy_id in enemy_ids:
-                x, y = enemy_units.get_unit(enemy_id).position()
-                if abs(x - r) == 1 and y == c:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
-                elif x == r and abs(y - c) == 1:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
+            if self.pref is not None:
+                if self.pref in enemy_ids:
+                    x, y = enemy_units.get_unit(self.pref).position()
+                    if abs(x - r) + abs(y - c) == 1:
+                        self.dest = (x, y)
+                        return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
 
-                distance = bfs(locked, (r, c), (x, y))
-                if distance is not None:
-                    if len(distance) < closest:
-                        closest = len(distance)
-                        position = (x, y)
+                    else:
+                        position = enemy_units.get_unit(self.pref).position()
+                else:
+                    self.pref = None
+            else:
+                for enemy_id in enemy_ids:
+                    x, y = enemy_units.get_unit(enemy_id).position()
+                    if abs(x - r) + abs(y - c) == 1:
+                        self.pref = enemy_id
+                        self.dest = (x, y)
+                        return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
+
+                    if self.pref is None:
+                        distance = bfs(locked, (r, c), (x, y))
+                        if distance is not None:
+                            if len(distance) < closest:
+                                closest = len(distance)
+                                position = (x, y)
 
             distance = bfs(locked, (r, c), position)
-
+            self.dest = position
             if distance is not None:
+                if len(distance) > 4 and direction_to(unit, distance[1]) == direction_to(unit, distance[2]):
+                    return createDirectionMove(unit.id, direction_to(unit, distance[1]), 2)
                 return createDirectionMove(unit.id, direction_to(unit, distance[1]), 1)
             else:
                 return createDirectionMove(unit.id, get_random_direction(), 1)
@@ -311,20 +376,50 @@ class Attack(Decision):
         elif unit.type == Units.ARCHER:
             for enemy_id in enemy_ids:
                 x, y = enemy_units.get(enemy_id).pos_tuple
-                if abs(x - r) <= 2 and y == c:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
-                elif x == r and abs(y - c) <= 2:
-                    return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                if abs(x - r) + abs(y - c) == 1 and enemy_units.get_unit(enemy_id).type == UNITS.KNIGHT:
+                    if is_within_map(locked, r - 1, c) and locked[r - 1][c] == 0:
+                        return createDirectionMove(unit.id, Direction.DOWN, 1)
+                    elif is_within_map(r, c - 1) and locked[r][c - 1] == 0:
+                        return createDirectionMove(unit.id, Direction.LEFT, 1)
+                    elif is_within_map(r, c + 1) and locked[r][c + 1] == 0:
+                        return createDirectionMove(unit.id, Direction.RIGHT, 1)
+                    elif is_within_map(r + 1, c) and locked[r + 1][c] == 0:
+                        return createDirectionMove(unit.id, Direction.UP, 1)
 
-                distance = bfs(locked, (r, c), (x, y))
-                if distance is not None and len(distance) < closest:
-                    closest = len(distance)
-                    position = (x, y)
+            if self.pref is not None:
+                if self.pref in enemy_ids:
+                    x, y = enemy_units.get_unit(self.pref).position()
+                    if abs(x - r) <= 2 and y == c:
+                        self.dest = (x, y)
+                        return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                    elif x == r and abs(y - c) <= 2:
+                        self.dest = (x, y)
+                        return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                    else:
+                        position = (x, y)
+                else:
+                    self.pref = None
+            else:
+                for enemy_id in enemy_ids:
+                    x, y = enemy_units.get(enemy_id).pos_tuple
+                    if abs(x - r) <= 2 and y == c:
+                        self.pref = enemy_id
+                        self.dest = (x, y)
+                        return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+                    elif x == r and abs(y - c) <= 2:
+                        self.pref = enemy_id
+                        self.dest = (x, y)
+                        return createAttackMove(unit.id, direction_to(unit, (x, y)), abs(x - r))
+
+                    distance = bfs(locked, (r, c), (x, y))
+                    if distance is not None and len(distance) < closest:
+                        closest = len(distance)
+                        position = (x, y)
 
             distance = bfs(locked, (r, c), position)
-            if distance is None:
-                return
-            return createDirectionMove(unit.id, direction_to(unit, distance[0]), 1)
+            if distance is not None:
+                return createDirectionMove(unit.id, direction_to(unit, distance[1]), 1)
+            return createDirectionMove(unit.id, get_random_direction(), 1)
 
     def __str__(self) -> str:
         return 'Attack'
@@ -350,6 +445,66 @@ class Mine(Decision):
         return self.time <= 0
 
 
+def get_enemy_in_block(unit: Unit, enemy: Units, block_size: int, location: Tuple[int, int], locked) -> List[
+    Tuple[int, int]]:
+    enemy_units = enemy
+    enemy_ids = enemy_units.get_all_unit_ids()
+    closest = 1000
+    position = unit.position()
+    r, c = unit.position()
+    for enemy_id in enemy_ids:
+        x, y = enemy_units.get_unit(enemy_id).position()
+        if abs(x - location[0]) <= block_size and abs(y - location[1]) <= block_size:
+            if abs(x - r) + abs(y - c) == 1:
+                return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
+            distance = bfs(locked, (r, c), (x, y))
+            if distance is not None:
+                if len(distance) < closest:
+                    closest = len(distance)
+                    position = (x, y)
+    if position == (r, c):
+        path = bfs(locked, (r, c), location)
+    else:
+        path = bfs(locked, (r, c), position)
+    if path is not None:
+        return createDirectionMove(unit.id, direction_to(unit, path[1]), 1)
+
+
+class StandbyGaurd(Decision):
+    def __init__(self, dest: Tuple[int, int], size: int):
+        super().__init__()
+        self.dest = dest
+        self.size = size
+
+    def next_move(self, unit: Unit, **kwargs):
+        enemy_units = kwargs.get('enemy_units')
+        # kwargs.get('locked')[k[1]][k[0]] =
+        locked = kwargs.get('locked')
+        enemy_ids = enemy_units.get_all_unit_ids()
+        closest = 1000
+        position = unit.position()
+        r, c = unit.position()
+        for enemy_id in enemy_ids:
+            x, y = enemy_units.get_unit(enemy_id).position()
+            if abs(x - self.dest[0]) <= self.size and abs(y - self.dest[1]) <= self.size:
+                if abs(x - r) + abs(y - c) == 1:
+                    return createAttackMove(unit.id, direction_to(unit, (x, y)), 1)
+                distance = bfs(locked, (r, c), (x, y))
+                if distance is not None:
+                    if len(distance) < closest:
+                        closest = len(distance)
+                        position = (x, y)
+        if position == (r, c):
+            path = bfs(locked, (r, c), self.dest)
+        else:
+            path = bfs(locked, (r, c), position)
+        if path is not None:
+            return createDirectionMove(unit.id, direction_to(unit, path[1]), 1)
+
+    def are_u_done(self, unit: Unit, **kwargs):
+        return False
+
+
 class GoTo(Decision):
 
     def __init__(self, destination: Tuple[int, int]):
@@ -358,14 +513,14 @@ class GoTo(Decision):
 
     def next_move(self, unit: Unit, **kwargs) -> Tuple[Moves, int, Direction, int]:
         k = unit.position()
-        #kwargs.get('locked')[k[1]][k[0]] = 1
+        # kwargs.get('locked')[k[1]][k[0]] = 1
         if k != self.destination:
             # bfs1 = kwargs.get('game_map')
             path = bfs(kwargs.get('locked'), k, self.destination)
             if path is None:
                 return
             next_pos = path[1]
-           # kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
+            # kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
             return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
 
     def reset(self):
@@ -385,7 +540,7 @@ class Buy(Decision):
         super().__init__()
         self.piece_type = piece_type
         self.bought = False
-        self.time = 1
+        self.time = 2
 
     def next_move(self, unit: Unit, **kwargs) -> Optional[Tuple[Moves, int, Type, Direction]]:
         self.time -= 1
@@ -393,9 +548,12 @@ class Buy(Decision):
         c = unit.x
         r = unit.y
         dir = None
-        for i in ((c, r + 1), (c, r - 1), (c + 1, r), (c - 1, r)):
+        t = set(i.position() for i in kwargs.get('your_units').units.values())
+        t = t.union(set(i.position() for i in kwargs.get('enemy_units').units.values()))
+        for i in {(c, r + 1), (c, r - 1), (c + 1, r), (c - 1, r)} - t:
             if is_within_map(locked, i[0], i[1]) and locked[i[1]][i[0]] != 1:
                 dir = direction_to(unit, i)
+                print(i, dir)
                 break
         if dir is not None and self.bought is False:
             self.bought = True
@@ -406,6 +564,10 @@ class Buy(Decision):
 
     def __str__(self) -> str:
         return 'Buy'
+
+
+# class StayAndGuard(Decision):
+#     def __init__(self):
 
 
 class Upgrade(Decision):
@@ -427,20 +589,28 @@ class GoToMine(Decision):
         self.destination = destination
         self.mined = False
         self.time = 2
+        self.lvl = 0
 
     def next_move(self, unit: Unit, **kwargs) -> Union[Tuple[Moves, int, Direction, int], Tuple[Moves, int]]:
         k = unit.position()
-        #kwargs.get('locked')[k[1]][k[0]] = 1
         if self.destination is None:
-            print(kwargs.get('avail_resources'))
+            k = kwargs.get('game_map')
             self.destination = closest_resource(kwargs.get('avail_resources'), unit)
+            if k.is_tile_type(self.destination[0], self.destination[1], Tiles.SILVER):
+                self.lvl = 1
+            if k.is_tile_type(self.destination[0], self.destination[1], Tiles.GOLD):
+                self.lvl = 2
             kwargs.get('avail_resources')[self.destination] = unit.id
+        if self.lvl > 0:
+            self.lvl -= 1
+            return createUpgradeMove(unit.id)
+        # kwargs.get('locked')[k[1]][k[0]] = 1
+
         if (unit.x, unit.y) != self.destination:
             # bfs1 = kwargs.get('game_map')
             path = bfs(kwargs.get('locked'), (unit.x, unit.y), self.destination)
-            print(unit.id, path)
             next_pos = path[1]
-          #  kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
+            #  kwargs.get('locked')[next_pos[1]][next_pos[0]] = 1
             return createDirectionMove(unit.id, direction_to(unit, next_pos), MAX_MOVEMENT_SPEED[Units.WORKER])
         if (unit.x, unit.y) == self.destination and self.mined is False:
             self.mined = True
@@ -465,6 +635,7 @@ class Q:
 
     def __init__(self):
         self.queue = queue.Queue()
+        self.k = []
 
     def get(self, unit_type: Type = None) -> Decision:
         """
@@ -474,12 +645,14 @@ class Q:
             return Mine()
         if self.queue.empty() and unit_type == Units.KNIGHT:
             return Attack()
+        self.k.pop(0)
         return self.queue.get()
 
     def put(self, item: Decision) -> None:
         """
         Adds a decision to the <self.queue>.
         """
+        self.k.append(item)
         self.queue.put(item)
 
     def empty(self, type=None) -> bool:

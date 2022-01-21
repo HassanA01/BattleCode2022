@@ -201,6 +201,7 @@ def is_within_map(map, x, y):
 
 
 class Units:
+
     def __init__(self, units: dict) -> None:
         """
         Initialize a new Units.
@@ -239,6 +240,8 @@ def direction_to(unit, pos: (int, int)):
     """
     Returns a required direction from a unit to <pos> (x,y).
     """
+    print("Unit position,", unit.x, unit.y)
+    print("position", pos)
     if unit.y < pos[1]:
         return Direction.DOWN
     elif unit.y > pos[1]:
@@ -247,6 +250,8 @@ def direction_to(unit, pos: (int, int)):
         return Direction.LEFT
     elif unit.x < pos[0]:
         return Direction.RIGHT
+
+    raise Exception("DirectionTo ERROR")
 
 
 def does_have_flag(unit: Unit):

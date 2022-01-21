@@ -58,7 +58,8 @@ UPGRADE_COSTS = {
     3:20
   }
 }
- # unittype to 
+
+ # unittype to
 ATTACK_DAMAGE = {
   Units.WORKER: {
     1:0,
@@ -104,7 +105,19 @@ MINING_REWARDS = {
     Tiles.SILVER: 50,
     Tiles.COPPER: 25
 }
+# Not used, but here for transparency.
+UNIT_HEALTH={
+  Units.WORKER:100,
+  Units.SCOUT:60,
+  Units.KNIGHT:130,
+  Units.ARCHER:100
+}
 
+MINING_LEVEL_MINIMUM = {
+    Tiles.GOLD: 3,
+    Tiles.SILVER: 2,
+    Tiles.COPPER: 1
+}
 MINING_TIME = 3  # One of the enemies turns ,one of your turns
 BUY_TIME = 3  # One of the enemies turns ,one of your turns
 # These add one because it reduces this number on the turn you cast the move as well.
